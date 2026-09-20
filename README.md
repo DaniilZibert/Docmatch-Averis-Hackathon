@@ -42,22 +42,49 @@ taken down by a rate limit.
 pip install -r requirements.txt
 cp .env.example .env          # optional: add ANTHROPIC_API_KEY for the fallbacks
 
-pytest -q                     # 161 tests — free, offline, no API calls
+pytest -q                     # 176 tests — free, offline, no API calls
 python -m src.pipeline        # 520 emails -> submission.json + a run summary
 python -m src.pipeline --report out/report.md      # + the discrepancy report
 ```
 
-The service and the human-review screen:
+## The product
 
 ```bash
-uvicorn src.api.main:app --reload     # http://localhost:8000
-curl -X POST localhost:8000/run       # process the inbox, then open the page
+uvicorn src.api.main:app --reload     # then open http://localhost:8000
 ```
 
-The screen lists every case a person has to settle and every discrepancy found, each
-with the seven fields side by side and the label each value was read under. Tick the
-rows that really differ and press **Confirm mismatch**, or **No mismatch** to clear the
-case — the verdict, the counters and `/report` update immediately.
+That is the whole thing — it processes the inbox itself on startup, so there is no
+command to run and nothing to load.
+
+| screen | what it is for |
+|---|---|
+| **Overview** | what came in, what was found, what is waiting for a person |
+| **Inbox** | all 520 emails, filterable by category and outcome, searchable |
+| **Case** | one email beside the two documents, field by field, with the decision |
+| **Report** | the discrepancy report, ready to send on |
+
+A case shows the email on the left and the seven compared fields on the right, with the
+differing rows highlighted and the label each value was read under ("read as SI
+'Consignee (Non-Negotiable)' vs BL 'To the Order of'"). The SI and the BL are links —
+the reviewer can open the source document and check us. Tick the rows that really
+differ and press **Confirm discrepancy**, or **No mismatch** to clear the case; the
+verdict, the counters and the report update immediately and the app moves to the next
+case in the queue.
+
+Rows that are blank on one side are deliberately *not* pre-ticked: a missing value is
+why we stopped, not a discrepancy, and the screen should not walk a reviewer into
+confusing the two.
+
+### On a server
+
+```bash
+cp .env.example .env          # set SDOC_DOMAIN
+docker compose -f deploy/docker-compose.prod.yml up -d --build
+```
+
+One container behind Caddy, which gets a Let's Encrypt certificate on its own. The full
+runbook — EC2 instance, security group, DNS, what the GitHub Student Pack covers — is in
+**[docs/deploy-aws.md](docs/deploy-aws.md)**.
 
 Measuring a change:
 

@@ -62,7 +62,7 @@ Output goes to `submission.json`, keyed by `email_id`, in the shape of
 ```bash
 pip install -r requirements.txt
 cp .env.example .env            # optional; see below
-pytest -q                       # 161 tests, no network, no spend
+pytest -q                       # 176 tests, no network, no spend
 python -m src.pipeline          # 520 emails -> submission.json, ~1s, no LLM calls
 ```
 
@@ -123,13 +123,17 @@ src/
     pdf_extractor.py       ✅ 28 files: text layer, container table, vision fallback
     llm_extract.py         ✅ Claude text/vision/classify — returns None, never raises
   db/schema.sql            ✅ the shape a real deployment persists
-  api/main.py              ✅ service + review screen with working confirm/correct
+  api/main.py              ✅ routes: 4 screens + the JSON API
+  api/store.py             ✅ state + the run, started automatically on boot
+  api/ui.py                ✅ the screens (server-rendered, no build step)
 scripts/
   run_self_eval.py         ✅ POST submission.json to the organizers' server
   evaluate.py              ✅ score, save a run, diff two runs, error analysis
   llm_smoke.py             ✅ prove the Claude paths work (costs a few cents)
   check_robustness.sh      ✅ score against freshly generated, never-seen inboxes
-tests/                     ✅ 161 tests, contract + every stage + end-to-end invariants
+docs/deploy-aws.md         ✅ runbook: EC2 + domain + HTTPS
+deploy/                    ✅ Dockerfile, local compose, prod compose + Caddy
+tests/                     ✅ 176 tests, contract + every stage + API + end-to-end
 ```
 
 Remaining work is judge-facing, not pipeline: see §8.
@@ -269,8 +273,10 @@ python -m src.pipeline --limit 20     # quick pass while developing
 python -m src.pipeline --report out/report.md    # + the discrepancy report
 python -m src.pipeline --plain-submission        # drop decided_by, exact sample shape
 
-uvicorn src.api.main:app --reload     # service + review screen on :8000
-curl -X POST localhost:8000/run       # then open http://localhost:8000
+uvicorn src.api.main:app --reload     # then open http://localhost:8000
+                                      # it processes the inbox itself — no command needed
+
+docker compose -f deploy/docker-compose.prod.yml up -d --build   # on a server, with HTTPS
 
 # measurement — the answer key lives OUTSIDE this repo
 python scripts/evaluate.py --ground-truth /path/to/ground_truth.json
@@ -306,9 +312,10 @@ The pipeline is done. These are rubric lines, not accuracy:
    (`raw_label` + `source` + `confidence`), and the review screen feeding corrections
    back. Still unbuilt: mining a human's correction into a new alias so the system
    learns, and auto-drafting the reply to the carrier.
-4. **Practical Value (10).** The real inbox is Outlook `.msg`. Sketch the ingest path
-   (IMAP / Graph API + `.msg` parsing) and put throughput and cost per 1000 emails on a
-   slide.
+4. **Practical Value (10).** The service is deployable (`docs/deploy-aws.md`) — put it
+   on a real URL before judging and walk it on a phone. Still to sketch: the real inbox
+   is Outlook `.msg`, so show the ingest path (IMAP / Graph API + `.msg` parsing) and
+   put throughput and cost per 1000 emails on a slide.
 5. **Demo.** Three-minute script, and rehearse it with `ANTHROPIC_API_KEY` unset — the
    whole system runs rules-only and says so on `/health`. Never demo something that
    needs the network to work.
