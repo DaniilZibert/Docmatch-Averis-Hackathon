@@ -1,0 +1,13 @@
+#!/bin/sh
+# Strip Co-Authored-By trailers from every commit message.
+#
+# Installed locally; .git/hooks does not travel with a clone, so the committed copy
+# lives in tools/hooks/commit-msg and tools/install-hooks.sh puts it here.
+#
+# sed -i needs a backup suffix on BSD/macOS and rejects one on GNU, so the portable
+# form is a temp file rather than in-place editing.
+tmp="$1.stripped"
+sed '/^[Cc]o-[Aa]uthored-[Bb]y:/d' "$1" > "$tmp" || exit 0
+# drop any blank lines the removal left at the end
+awk 'BEGIN{n=0} {lines[NR]=$0} END{last=NR; while(last>0 && lines[last]~/^[[:space:]]*$/) last--; for(i=1;i<=last;i++) print lines[i]}' "$tmp" > "$1"
+rm -f "$tmp"
