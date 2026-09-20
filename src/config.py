@@ -151,6 +151,13 @@ def max_llm_calls() -> int:
         return 40
 
 
+def version() -> str:
+    """The commit this build came from, baked in at image build time. Reported on
+    /health so a deployment can be confirmed from outside — the server pulls its own
+    updates, so "did my change land?" has to be answerable over HTTP."""
+    return os.environ.get("SDOC_VERSION", "dev")
+
+
 def data_dir() -> str:
     """Where the inbox lives: a folder holding inbox/ and attachments/.
 
@@ -168,5 +175,5 @@ def data_dir() -> str:
 
 
 __all__ = ["PROJECT_ROOT", "api_key", "model", "max_llm_calls", "data_dir",
-           "state_file", "llm_enabled", "llm_setting_source", "set_llm_enabled",
+           "version", "state_file", "llm_enabled", "llm_setting_source", "set_llm_enabled",
            "token_prices"]

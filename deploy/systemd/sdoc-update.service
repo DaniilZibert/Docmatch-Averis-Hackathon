@@ -1,0 +1,23 @@
+# Pull the newest image and restart if it changed.
+#
+# The server updates ITSELF rather than CI pushing to it. GitLab.com does not publish
+# static IPs for its shared runners — allowlisting them on port 22 would mean opening
+# ssh to most of Google Cloud — so the choice was between a wide-open ssh port and no
+# inbound deploy channel at all. This is the third option: nothing inbound, the box
+# polls a registry it can already read.
+#
+# `docker compose up -d` is a no-op when the image digest has not moved, so running
+# this every minute costs one registry HEAD request and nothing else.
+[Unit]
+Description=Pull and restart SDOC if a new image was published
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/averis-hackaton
+Environment=SDOC_IMAGE=registry.gitlab.com/daniilz2018/averis-hackaton:latest
+ExecStart=/usr/bin/docker compose -f deploy/docker-compose.prod.yml pull --quiet app
+ExecStart=/usr/bin/docker compose -f deploy/docker-compose.prod.yml up -d --no-build app
+ExecStart=/usr/bin/docker image prune -f

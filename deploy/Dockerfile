@@ -1,5 +1,10 @@
 FROM python:3.11-slim
 
+# Which commit this image was built from. CI passes it; /health reports it, which is
+# how a deploy is confirmed without anyone having to ssh in and look.
+ARG GIT_SHA=dev
+ENV SDOC_VERSION=$GIT_SHA
+
 WORKDIR /app
 
 # System deps for the document extractors (PDF rendering for the vision fallback).

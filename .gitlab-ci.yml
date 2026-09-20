@@ -1,31 +1,27 @@
 # CI/CD for the shipping document verification service.
 #
 #   test    every push: the suite, plus a real run scored for shape
-#   build   on main: build the image and push it to the GitLab registry
-#   deploy  on main: ssh to the server, pull the new image, restart
+#   build   on main: build the image, prove it starts, push it to the GitLab registry
+#   deploy  on main: wait for the server to pick it up and report the new commit
 #
 # The image is built HERE, not on the server. A t3.micro has 1 GB of RAM and installing
 # pymupdf and pdfplumber on it is a coin flip; pulling a finished image is not.
 #
+# THERE IS NO SSH ANYWHERE IN THIS PIPELINE, and that is deliberate. GitLab.com
+# publishes no static IPs for its shared runners — its own documentation says to
+# allowlist "both AWS and Google Cloud IP ranges" — so a CI job that sshs in requires
+# opening port 22 to most of a cloud provider. Instead the server polls the registry on
+# a one-minute systemd timer (deploy/systemd/) and this pipeline verifies the result
+# over HTTPS. CI therefore holds no credentials of any kind, and the security group
+# keeps ssh pinned to one address.
+#
 # ---------------------------------------------------------------------------
-# Settings → CI/CD → Variables, before the first deploy:
+# Settings → CI/CD → Variables — one variable, and it is not a secret:
 #
-#   SSH_PRIVATE_KEY   type File, Protected, Masked-unavailable(it is multiline).
-#                     The private half of a key whose public half is in the server's
-#                     ~/.ssh/authorized_keys. Generate a NEW one for CI —
-#                     `ssh-keygen -t ed25519 -f deploy_key -C gitlab-ci` — and never
-#                     reuse your laptop's key.
-#   SSH_KNOWN_HOSTS   type File. Output of `ssh-keyscan <server-ip>` run from a machine
-#                     you trust. Pinning this is what stops CI from trusting an
-#                     impostor host.
-#   DEPLOY_HOST       the server's IP or hostname
-#   DEPLOY_USER       ubuntu
-#   DEPLOY_PATH       /home/ubuntu/averis-hackaton
+#   DEPLOY_HOST   the public hostname, e.g. docmatch.tech
 #
-# Optional, Protected + Masked:
-#   ANTHROPIC_API_KEY written into the server's .env on deploy. Leave it unset and the
-#                     service runs rules-only — which is the default anyway, because the
-#                     Claude switch ships off. See docs/deploy-aws.md.
+# SSH_PRIVATE_KEY, SSH_KNOWN_HOSTS, DEPLOY_USER and DEPLOY_PATH are no longer used and
+# can be deleted.
 # ---------------------------------------------------------------------------
 
 stages: [test, build, deploy]
@@ -83,7 +79,7 @@ build:
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
   script:
-    - docker build -f deploy/Dockerfile -t "$IMAGE" -t "$IMAGE_LATEST" .
+    - docker build --build-arg GIT_SHA="$CI_COMMIT_SHORT_SHA" -f deploy/Dockerfile -t "$IMAGE" -t "$IMAGE_LATEST" .
     - docker push "$IMAGE"
     - docker push "$IMAGE_LATEST"
     # the image must actually come up, or we would ship a container that dies on boot
@@ -102,55 +98,39 @@ deploy:
   environment:
     name: production
     url: https://$DEPLOY_HOST
+  # NO SSH. The server pulls its own updates on a one-minute systemd timer
+  # (deploy/systemd/), and this job waits for /health to report the commit it just
+  # built.
+  #
+  # Why: GitLab.com publishes no static IPs for shared runners — its own docs say to
+  # allowlist "both AWS and Google Cloud IP ranges" — so letting CI ssh in means
+  # opening port 22 to most of a cloud provider. The security group keeps ssh pinned to
+  # one address, CI holds no credentials at all, and a deploy is still verified rather
+  # than assumed. The first version of this job did use ssh and failed every run: the
+  # runner could not reach the box, which is exactly the firewall doing its job.
   before_script:
-    - apk add --no-cache openssh-client
-    - eval $(ssh-agent -s)
-    - chmod 600 "$SSH_PRIVATE_KEY" && ssh-add "$SSH_PRIVATE_KEY"
-    - mkdir -p ~/.ssh && cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
+    - apk add --no-cache curl >/dev/null
   script:
-    # No `docker login` here, deliberately. This project is public, so its container
-    # registry serves anonymous pulls — verified with a credential-free `docker pull`.
-    #
-    # The first version of this job DID log in, and got it wrong in a way worth
-    # remembering: it wrote \$CI_REGISTRY_PASSWORD, so the variable expanded on the
-    # SERVER, where it does not exist. docker login received an empty password, failed,
-    # and `set -e` killed the deploy before it touched anything. The heredoc below is
-    # unquoted, which means the runner expands it — escape a variable only when you
-    # genuinely want the server to resolve it.
-    #
-    # If this project is ever made private, do not put credentials back in here. Run
-    # `docker login registry.gitlab.com` once on the server with a read_registry deploy
-    # token; it persists in ~/.docker/config.json.
+    - echo "waiting for $CI_COMMIT_SHORT_SHA to go live on $DEPLOY_HOST"
     - |
-      ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s <<SSH
-        set -euo pipefail
-        cd "$DEPLOY_PATH"
-        export SDOC_IMAGE="$IMAGE"
-        docker compose -f deploy/docker-compose.prod.yml pull app
-        docker compose -f deploy/docker-compose.prod.yml up -d --no-build
-        docker image prune -f
-        docker compose -f deploy/docker-compose.prod.yml ps
-      SSH
-    - echo "-- wait for the new build to answer --"
-    # -L matters. With a certificate in place Caddy answers port 80 with a 308, and curl
-    # counts a redirect as success, so a check that does not follow it goes green while
-    # the app is still on its back. Match on the body, not on the status code.
-    - |
-      apk add --no-cache curl >/dev/null
-      for i in $(seq 1 30); do
+      for i in $(seq 1 40); do
         body=$(curl -fsSL --max-time 10 "https://$DEPLOY_HOST/health" 2>/dev/null \
                || curl -fsSL --max-time 10 "http://$DEPLOY_HOST/health" 2>/dev/null \
                || true)
         case "$body" in
-          *'"status":"ok"'*)
-            echo "healthy after $((i*10))s"
-            echo "$body" | head -c 300
-            exit 0 ;;
+          *"\"version\":\"$CI_COMMIT_SHORT_SHA\""*)
+            case "$body" in
+              *'"status":"ok"'*)
+                echo "live after $((i*15))s"
+                echo "$body" | head -c 300
+                exit 0 ;;
+            esac ;;
         esac
-        sleep 10
+        sleep 15
       done
-      echo "the service never reported healthy."
-      echo "  ssh in and look: docker compose -f deploy/docker-compose.prod.yml logs --tail=80 app"
+      echo "$CI_COMMIT_SHORT_SHA never appeared on $DEPLOY_HOST/health after 10 minutes."
+      echo "  last seen: $(echo "$body" | head -c 200)"
+      echo "  on the server: systemctl status sdoc-update.timer; journalctl -u sdoc-update -n 40"
       exit 1
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

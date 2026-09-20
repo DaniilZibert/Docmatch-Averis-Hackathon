@@ -158,7 +158,8 @@ def favicon() -> Response:
 @app.get("/health")
 def health() -> dict[str, Any]:
     llm = _llm()
-    return {"status": "ok", "run": STORE.run.as_dict(), **STORE.counts(),
+    return {"status": "ok", "version": config.version(),
+            "run": STORE.run.as_dict(), **STORE.counts(),
             "llm": "available" if llm["available"] else "rules-only",
             "llm_detail": llm}
 
