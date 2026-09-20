@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import re
 
+from . import config
 from .models import Category, DecidedBy, EmailRecord
 
 # ---------------------------------------------------------------------------
@@ -119,6 +120,15 @@ def classify_with_evidence(email: EmailRecord) -> tuple[Category, DecidedBy, str
     subject = email.subject or ""
     body = email.body or ""
     sender = email.sender or ""
+
+    # Ablation only: skip every rule so the model's own accuracy can be measured.
+    # See config.force_llm.
+    if config.force_llm():
+        from .extractor.llm_extract import classify_email
+        category = classify_email(subject, body)
+        if category is not None:
+            return category, DecidedBy.LLM, "llm:forced"
+        return Category.GENERAL, DecidedBy.LLM, "llm:forced-failed"
 
     # 1. Spam, before anything else: a phishing mail may quote a real subject line.
     if SPAM_SENDER.search(sender):

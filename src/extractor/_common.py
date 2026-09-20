@@ -9,6 +9,7 @@ once, so the four extractors cannot drift apart.
 
 from __future__ import annotations
 
+from .. import config
 from ..models import (COMPARED_FIELDS, NUMERIC_FIELDS, DocType, ExtractedDocument,
                       ExtractedField, FieldSource)
 from ..normalize import is_blank, parse_number
@@ -43,6 +44,15 @@ def build_document(pairs: list[tuple[str, str]], *, email_id: str, doc_type: Doc
     own data is exactly the case where a label we have no alias for would otherwise be
     reported as "unreadable" instead of simply being read.
     """
+    # Ablation only: hand the document straight to the model without parsing it, so the
+    # AI-only column of the table is measured rather than assumed. See config.force_llm.
+    if config.force_llm() and text:
+        document = llm_extract.extract_from_text(text, email_id, doc_type, source_path)
+        if document is not None:
+            return document
+        return unreadable_document(email_id, doc_type, source_path,
+                                   "forced-LLM mode: the model returned nothing")
+
     fields: dict[str, ExtractedField] = {}
     seen_labels: list[str] = []
 

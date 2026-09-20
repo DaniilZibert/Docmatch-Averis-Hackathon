@@ -230,19 +230,41 @@ later run free (measured: 6 paid calls then 0), backed by a cumulative $2.50 cei
 and a 20-second cooldown. Turning it on is a single safe command.
 See [OPERATIONS.md](OPERATIONS.md#3-the-ai-switch-and-what-stops-it-emptying-the-budget).
 
-**A1 · Ablation table — P0** *(was P1; the rules promoted it)* *(Technology Integration 15,
-Technical Feasibility 15)*
-Rules-only vs rules+AI vs AI-only, across accuracy, cost and latency. This is what turns
-"AI is a key component" from a claim into a measurement, and it is the same table that
-justifies the architecture. The rules-only column is already measured; the other two need
-the switch on. ~30 calls, under $0.50.
-*Done when:* a three-row table with real numbers, in the deck and the README.
+**A1 · Ablation table — DONE** ✅ *(Technology Integration 15, Technical Feasibility 15)*
 
-**A2 · What only AI can do — P0** *(Technology Integration, 15)*
-Quantify the part no rule can replace: six image-only scans read by vision, and the
-unfamiliar-layout rescue (`scripts/llm_smoke.py` already proves it reads 7/7 fields from
-a document with no known labels, and correctly takes gross weight over net). Record the
-per-call cost and latency. This is the honest answer to "is the AI load-bearing".
+`scripts/ablation.py`, artifact in `out/ablation.md`. Measured against the answer key,
+costs read from the spend ledger rather than estimated:
+
+| configuration | accuracy | macro-F1 | defect-F1 | documents read | $ / 1000 | sec / 1000 |
+|---|---|---|---|---|---|---|
+| Rules only | 1.000 | 1.000 | 1.000 | 242 | $0.00 | 3s |
+| **Rules + AI** (shipped) | 1.000 | 1.000 | 1.000 | **248** | $0.21 | 39s |
+| ↳ the same inbox again | 1.000 | 1.000 | 1.000 | 248 | $0.00 | 2s |
+| AI only *(sample of 57)* | 0.983 | 0.980 | 1.000 | 26 | $4.19 | 2882s |
+
+**For the deck, in one line:** the deterministic path matches the model on every scored axis,
+for nothing and in a second — but it cannot read the six
+image-only scans at all, and vision can. That is the hybrid, and it is now measured
+rather than asserted.
+
+AI-only is a stratified sample, ten per category, and labelled as one: a full AI-only
+pass is about $3.50, most of the team budget, to answer a question a sample answers.
+
+*Reproduce:* `python scripts/ablation.py --ground-truth <key> --all --sample 50 --pairs 8`
+
+**A2 · What only AI can do — DONE** ✅ *(Technology Integration, 15)*
+
+Two measurements, both real:
+
+* **Six image-only scans.** Rules read 242 of the 248 attachments; vision reads the
+  other six. No parser opens a PDF with no text layer — this is the part of the problem
+  that has no deterministic answer. $0.11 for the six, and free on every later run.
+* **Unfamiliar layouts.** A booking note written entirely in labels nothing recognises
+  ("Party sending the goods", "Taking on board at", "Boxes in this lot") came back with
+  all seven fields, `seven x 40'HC` read as 7, the gross weight taken rather than the
+  net figure beside it, and the planted PIRAEUS/THESSALONIKI discrepancy found. Two
+  calls, $0.0104. Reproduce through **Upload new data** on the site, or
+  `scripts/llm_smoke.py`.
 
 **A3 · Reframe our own materials — P0** *(30 minutes)*
 README and the header currently lead with the absence of AI. Change the story to what it

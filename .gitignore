@@ -14,8 +14,13 @@ venv/
 
 # pipeline output
 submission.json
-out/
 *.log
+
+# out/ is scratch, EXCEPT the ablation artifact: it is evidence, it took real money to
+# produce, and a judge should be able to read it without running anything.
+out/*
+!out/ablation.md
+!out/ablation.json
 
 # local run artifacts
 .venv/

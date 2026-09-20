@@ -227,6 +227,17 @@ def version() -> str:
     return os.environ.get("SDOC_VERSION", "dev")
 
 
+def force_llm() -> bool:
+    """Skip the deterministic path entirely and send everything to the model.
+
+    Only used to measure the AI-only column of the ablation table
+    (scripts/ablation.py). It exists so that column is a real measurement rather than
+    an estimate — you cannot argue for a hybrid architecture against a number you
+    guessed. Never set in production; `SDOC_FORCE_LLM` is not in .env.example.
+    """
+    return os.environ.get("SDOC_FORCE_LLM", "").strip().lower() in {"1", "on", "true", "yes"}
+
+
 def data_dir() -> str:
     """Where the inbox lives: a folder holding inbox/ and attachments/.
 
@@ -244,6 +255,6 @@ def data_dir() -> str:
 
 
 __all__ = ["PROJECT_ROOT", "api_key", "model", "max_llm_calls", "data_dir",
-           "version", "state_file", "llm_enabled", "llm_setting_source",
+           "version", "force_llm", "state_file", "llm_enabled", "llm_setting_source",
            "set_llm_enabled", "token_prices", "admin_token", "spend_cap_usd",
            "spent", "record_spend", "cap_reached", "reset_spend"]
