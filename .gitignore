@@ -21,6 +21,9 @@ out/
 .venv/
 run-*.json
 
+# the runtime LLM switch — a local/deployment setting, not source
+.sdoc-state.json
+
 # organizer answer key — must never land in this repo
 ground_truth.json
 

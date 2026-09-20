@@ -1,0 +1,134 @@
+# CI/CD for the shipping document verification service.
+#
+#   test    every push: the suite, plus a real run scored for shape
+#   build   on main: build the image and push it to the GitLab registry
+#   deploy  on main: ssh to the server, pull the new image, restart
+#
+# The image is built HERE, not on the server. A t3.micro has 1 GB of RAM and installing
+# pymupdf and pdfplumber on it is a coin flip; pulling a finished image is not.
+#
+# ---------------------------------------------------------------------------
+# Settings → CI/CD → Variables, before the first deploy:
+#
+#   SSH_PRIVATE_KEY   type File, Protected, Masked-unavailable(it is multiline).
+#                     The private half of a key whose public half is in the server's
+#                     ~/.ssh/authorized_keys. Generate a NEW one for CI —
+#                     `ssh-keygen -t ed25519 -f deploy_key -C gitlab-ci` — and never
+#                     reuse your laptop's key.
+#   SSH_KNOWN_HOSTS   type File. Output of `ssh-keyscan <server-ip>` run from a machine
+#                     you trust. Pinning this is what stops CI from trusting an
+#                     impostor host.
+#   DEPLOY_HOST       the server's IP or hostname
+#   DEPLOY_USER       ubuntu
+#   DEPLOY_PATH       /home/ubuntu/averis-hackaton
+#
+# Optional, Protected + Masked:
+#   ANTHROPIC_API_KEY written into the server's .env on deploy. Leave it unset and the
+#                     service runs rules-only — which is the default anyway, because the
+#                     Claude switch ships off. See docs/deploy-aws.md.
+# ---------------------------------------------------------------------------
+
+stages: [test, build, deploy]
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  IMAGE: "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+  IMAGE_LATEST: "$CI_REGISTRY_IMAGE:latest"
+  # Never let CI spend the Claude budget. The suite disables it too (tests/conftest.py),
+  # this is the belt to that pair of braces.
+  SDOC_LLM: "off"
+  LLM_MAX_CALLS: "0"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths: [.cache/pip]
+
+# ---------------------------------------------------------------------------
+test:
+  stage: test
+  image: python:3.11-slim
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends gcc >/dev/null
+    - pip install --quiet --upgrade pip
+    - pip install --quiet -r requirements.txt
+  script:
+    - echo "── unit and integration tests ──"
+    - pytest -q
+    - echo "── a real run over the whole inbox ──"
+    - python -m src.pipeline --out submission.json
+    - echo "── the submission must be shaped exactly as the organizers expect ──"
+    - |
+      python - <<'PY'
+      import json, sys
+      from src.submission import validate_submission
+      sub = json.load(open("submission.json"))
+      problems = validate_submission(sub, "data")
+      assert len(sub) == 520, f"expected 520 entries, got {len(sub)}"
+      assert not problems, problems
+      print(f"submission ok: {len(sub)} entries, no shape problems")
+      PY
+  artifacts:
+    paths: [submission.json]
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+# ---------------------------------------------------------------------------
+build:
+  stage: build
+  image: docker:27-cli
+  services: [docker:27-dind]
+  needs: [test]
+  before_script:
+    - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+  script:
+    - docker build -f deploy/Dockerfile -t "$IMAGE" -t "$IMAGE_LATEST" .
+    - docker push "$IMAGE"
+    - docker push "$IMAGE_LATEST"
+    # the image must actually come up, or we would ship a container that dies on boot
+    - docker run -d --name smoke -e SDOC_NO_AUTORUN=1 -p 8000:8000 "$IMAGE"
+    - sleep 12
+    - docker exec smoke python -c "import urllib.request,sys;sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)"
+    - docker rm -f smoke
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# ---------------------------------------------------------------------------
+deploy:
+  stage: deploy
+  image: alpine:3.20
+  needs: [build]
+  environment:
+    name: production
+    url: https://$DEPLOY_HOST
+  before_script:
+    - apk add --no-cache openssh-client
+    - eval $(ssh-agent -s)
+    - chmod 600 "$SSH_PRIVATE_KEY" && ssh-add "$SSH_PRIVATE_KEY"
+    - mkdir -p ~/.ssh && cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
+  script:
+    - |
+      ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s <<SSH
+        set -euo pipefail
+        cd "$DEPLOY_PATH"
+        echo "\$CI_REGISTRY_PASSWORD" | docker login -u "\$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
+        export SDOC_IMAGE="$IMAGE"
+        docker compose -f deploy/docker-compose.prod.yml pull app
+        docker compose -f deploy/docker-compose.prod.yml up -d --no-build
+        docker image prune -f
+      SSH
+    - echo "── wait for it to answer ──"
+    - |
+      apk add --no-cache curl >/dev/null
+      for i in $(seq 1 30); do
+        if curl -fsS "http://$DEPLOY_HOST/health" >/dev/null 2>&1 || \
+           curl -fsSk "https://$DEPLOY_HOST/health" >/dev/null 2>&1; then
+          echo "healthy after ${i}0s"; exit 0
+        fi
+        sleep 10
+      done
+      echo "the service did not become healthy — check: docker compose logs app"; exit 1
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: on_success

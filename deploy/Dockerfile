@@ -15,7 +15,13 @@ COPY data/ ./data/
 COPY scripts/ ./scripts/
 
 # Run as a non-root user: the container reads documents that arrive from outside.
-RUN useradd --create-home --uid 10001 sdoc && chown -R sdoc:sdoc /app
+# /state holds the Claude switch and is a named volume in production. Create it here
+# with the right ownership: Docker seeds a fresh named volume from the image, so if the
+# directory does not exist owned by this uid, the volume lands owned by root, the app
+# cannot write the switch, and the setting silently does not survive a restart.
+RUN useradd --create-home --uid 10001 sdoc \
+    && mkdir -p /state \
+    && chown -R sdoc:sdoc /app /state
 USER sdoc
 
 EXPOSE 8000
