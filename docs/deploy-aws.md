@@ -170,75 +170,52 @@ Belt and braces around it:
 
 ## CI/CD
 
-`.gitlab-ci.yml` runs on every push: the 195 tests, then a real pass over all 520 emails
-with the submission validated for shape. On `main` it also builds the image, smoke-tests
-that the container actually comes up, pushes it to the GitLab registry, and deploys.
+`.gitlab-ci.yml` runs on every push: the 197 tests, then a real pass over all 520 emails
+with the submission validated for shape. On `main` it also builds the image, proves the
+container actually starts, and pushes it to the GitLab registry.
 
-The image is built in CI rather than on the server on purpose — a t3.micro building
-pymupdf is a coin flip, pulling a finished image is not.
+**The deploy is a pull, not a push, and there is no ssh anywhere in the pipeline.**
 
-**Settings → CI/CD → Variables**, before the first automated deploy:
+The server runs a one-minute systemd timer (`deploy/systemd/`) that pulls `:latest` and
+restarts if the digest moved. The image carries the commit it was built from, `/health`
+reports it, and the deploy job simply waits until it sees its own commit go live.
 
-| variable | type | value |
+This is not a stylistic preference. The security group opens port 22 to a single
+address, and GitLab.com publishes **no static IPs** for its shared runners — the
+documentation says to allowlist "both AWS and Google Cloud IP ranges". A CI job that
+sshs in therefore needs port 22 open to most of a cloud provider. Pulling inverts the
+direction: nothing inbound, CI holds no credentials of any kind, and the deploy is
+still verified rather than assumed.
+
+The first version of this pipeline did ssh in, and failed every single run. The
+server's `auth.log` was what settled it — a GitLab runner had never connected at all.
+
+### The one variable
+
+**Settings → CI/CD → Variables:**
+
+| variable | value | secret? |
 |---|---|---|
-| `SSH_PRIVATE_KEY` | File, Protected | a key made **for CI only** |
-| `SSH_KNOWN_HOSTS` | File, Protected | `ssh-keyscan <elastic-ip>` run from your laptop |
-| `DEPLOY_HOST` | Variable | the Elastic IP (or the domain) |
-| `DEPLOY_USER` | Variable | `ubuntu` |
-| `DEPLOY_PATH` | Variable | `/home/ubuntu/averis-hackaton` |
+| `DEPLOY_HOST` | `docmatch.tech` | no |
 
-Make the CI key, and authorise only it:
+That is the whole list. `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `DEPLOY_USER` and
+`DEPLOY_PATH` are no longer used — delete them.
 
-```bash
-ssh-keygen -t ed25519 -f deploy_key -C gitlab-ci -N ""
-cat deploy_key.pub | ssh -i <your-key>.pem ubuntu@<ip> 'cat >> ~/.ssh/authorized_keys'
-ssh-keyscan <ip> > known_hosts        # paste this file into SSH_KNOWN_HOSTS
-# paste deploy_key (the private one) into SSH_PRIVATE_KEY, then delete it locally
-```
-
-Never reuse your laptop's key for this. Pinning `SSH_KNOWN_HOSTS` is what stops the
-deploy job from happily trusting an impostor host.
-
-The server does **not** need registry credentials while this project is public —
-GitLab serves anonymous pulls for public projects, and the deploy job relies on that.
-If you make the repository private, log in once on the server rather than threading
-credentials through CI:
+### Installing the timer on a new server
 
 ```bash
-# on the server, once; persists in ~/.docker/config.json
-docker login registry.gitlab.com -u <deploy-token-user> -p <read_registry deploy token>
+sudo cp deploy/systemd/sdoc-update.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now sdoc-update.timer
+
+systemctl list-timers sdoc-update --no-pager     # when it next fires
+journalctl -u sdoc-update -n 30                  # what it did last time
+sudo systemctl start sdoc-update.service         # force an update now
 ```
 
-### Two things that bit us here
-
-**An escaped variable in the ssh heredoc expands on the SERVER.** The heredoc is
-unquoted, so the runner expands it — which is what you want for CI variables like
-`$CI_REGISTRY_PASSWORD` or `$IMAGE`. Writing `\$VAR` sends the name literally and the
-server resolves it against its own (empty) environment. That is how the first deploy
-job spent three runs failing inside its own `docker login`.
-
-**`curl -f` counts a redirect as success.** Once Caddy has a certificate it answers
-port 80 with a 308, so `curl -fsS http://$DEPLOY_HOST/health` returns 0 without ever
-reaching the app: a deploy that left the service dead reported healthy. The check
-follows redirects and matches on `"status":"ok"` in the body instead. Any health check
-that only looks at an exit code has this hole.
-
-## Operations
-
-```bash
-# deploy a change
-git pull && docker compose -f deploy/docker-compose.prod.yml up -d --build
-
-# re-process the inbox without a restart
-curl -X POST https://sdoc.<your-domain>/run
-
-# logs, and the certificate Caddy issued
-docker compose -f deploy/docker-compose.prod.yml logs --tail=100 caddy
-docker compose -f deploy/docker-compose.prod.yml exec caddy ls /data/caddy/certificates
-```
-
-The Caddy certificates live in the `caddy_data` volume. Keep it across rebuilds or
-Let's Encrypt will rate-limit you for re-issuing.
+The registry is public for a public project, so the timer needs no credentials. If the
+repository is ever made private, run `docker login registry.gitlab.com` once on the
+server with a `read_registry` deploy token; it persists in `~/.docker/config.json`.
 
 ## When it does not work
 
@@ -252,4 +229,5 @@ Let's Encrypt will rate-limit you for re-issuing.
 | `"llm": "rules-only"` and you expected otherwise | the switch is off (click it in the header), or there is no key in `.env`, or `LLM_MAX_CALLS=0` |
 | the Claude switch forgets itself on restart | the `sdoc_state` volume is not writable by the container user — `logs app` will say so outright |
 | the first `up` gets killed with no message | no swap on a 1 GB box; see step 4 |
-| CI deploy fails at `ssh` | `SSH_KNOWN_HOSTS` is stale — the Elastic IP changed, or you never associated one |
+| deploy job times out waiting for its commit | the timer is not running (`systemctl status sdoc-update.timer`), or the pull failed (`journalctl -u sdoc-update -n 40`) |
+| a deploy takes longer than expected | the timer fires once a minute, so up to 60s plus the restart. That is the price of not exposing ssh |

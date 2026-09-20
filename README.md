@@ -42,7 +42,7 @@ taken down by a rate limit.
 pip install -r requirements.txt
 cp .env.example .env          # optional: add ANTHROPIC_API_KEY for the fallbacks
 
-pytest -q                     # 195 tests — free, offline, no API calls
+pytest -q                     # 197 tests — free, offline, no API calls
 python -m src.pipeline        # 520 emails -> submission.json + a run summary
 python -m src.pipeline --report out/report.md      # + the discrepancy report
 ```
@@ -95,9 +95,9 @@ cp .env.example .env          # set SDOC_DOMAIN
 docker compose -f deploy/docker-compose.prod.yml up -d --build
 ```
 
-The app behind Caddy, which gets a Let's Encrypt certificate on its own. Pushing to
-`main` runs the tests, builds the image, smoke-tests the container and deploys it
-(`.gitlab-ci.yml`). The full runbook is **[docs/deploy-aws.md](docs/deploy-aws.md)**; what is currently
+The app behind Caddy, which gets a Let's Encrypt certificate on its own. Pushing to `main` runs the tests, builds the image, smoke-tests the container and
+publishes it; the server picks it up within a minute on its own timer and the pipeline
+waits until `/health` reports the new commit. No ssh, and CI holds no credentials. The full runbook is **[docs/deploy-aws.md](docs/deploy-aws.md)**; what is currently
 provisioned is **[docs/aws-resources.md](docs/aws-resources.md)**; pointing a free
 `.tech` domain at it is **[docs/domain-tech.md](docs/domain-tech.md)**.
 

@@ -62,7 +62,7 @@ Output goes to `submission.json`, keyed by `email_id`, in the shape of
 ```bash
 pip install -r requirements.txt
 cp .env.example .env            # optional; see below
-pytest -q                       # 195 tests, no network, no spend
+pytest -q                       # 197 tests, no network, no spend
 python -m src.pipeline          # 520 emails -> submission.json, ~1s, no LLM calls
 ```
 
@@ -143,7 +143,7 @@ scripts/
 docs/deploy-aws.md         ✅ runbook: EC2 + .tech domain + HTTPS + CI/CD variables
 deploy/                    ✅ Dockerfile, local compose, prod compose + Caddy
 .gitlab-ci.yml             ✅ test -> build image -> deploy to the server
-tests/                     ✅ 195 tests, contract + every stage + API + the switch
+tests/                     ✅ 197 tests, contract + every stage + API + the switch
 ```
 
 Remaining work is judge-facing, not pipeline: see §8.
@@ -269,7 +269,7 @@ work:
 
 ### Before you change anything
 
-1. `pytest -q` — 176 tests. If they are green, the thing works; if your change reddens
+1. `pytest -q` — 197 tests. If they are green, the thing works; if your change reddens
    one, the test is usually right and the change is usually wrong.
 2. `./scripts/check_robustness.sh <path to data_v2>` after any change to the rules. The
    sample inbox is one draw from a generator; this scores you on fresh ones. It is what
