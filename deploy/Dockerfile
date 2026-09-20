@@ -14,8 +14,14 @@ COPY src/ ./src/
 COPY data/ ./data/
 COPY scripts/ ./scripts/
 
+# Run as a non-root user: the container reads documents that arrive from outside.
+RUN useradd --create-home --uid 10001 sdoc && chown -R sdoc:sdoc /app
+USER sdoc
+
 EXPOSE 8000
 
-# Process the inbox on boot so the review screen has something on it, then serve.
-CMD ["sh", "-c", "python -m src.pipeline --out /tmp/submission.json >/dev/null 2>&1; \
-     exec uvicorn src.api.main:app --host 0.0.0.0 --port 8000"]
+# The service processes the inbox itself on startup — see src/api/main.py lifespan.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"
+
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
