@@ -1,13 +1,20 @@
 # --- core ---
-pydantic==2.9.2
+# A floor, not an equality: pydantic pulls a compiled pydantic-core, and a hard pin means
+# no wheel for a Python newer than the pin. Verified against 2.9 and 2.13.
+pydantic>=2.9.2
 python-dotenv==1.0.1
 
 # --- document extraction ---
 openpyxl==3.1.5          # .xlsx
 python-docx==1.1.2       # .docx
 pdfplumber==0.11.4       # .pdf text layer
-pymupdf==1.24.10         # .pdf -> image for scanned pages (vision fallback)
-rapidfuzz==3.10.0        # fuzzy label matching — REQUIRED, not optional: the
+# These two ship compiled wheels, and a hard pin means no wheel for a Python newer than
+# the pin — pip then tries to build from source and the install fails. A judge on a
+# current Python would hit that on `pip install -r requirements.txt`, so they carry a
+# floor rather than an equality. The Docker image pins Python instead (3.11-slim), which
+# is where reproducibility actually matters.
+pymupdf>=1.24.10         # .pdf -> image for scanned pages (vision fallback)
+rapidfuzz>=3.10.0        # fuzzy label matching — REQUIRED, not optional: the
                          # bilingual Word/Excel labels ("Gross Weight毛重(KGS)")
                          # resolve only through the fuzzy pass.
 

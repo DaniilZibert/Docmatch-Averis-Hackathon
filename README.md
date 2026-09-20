@@ -103,6 +103,10 @@ what the model is for, and why this is a hybrid rather than a choice between the
 
 ## Quick start
 
+**Python 3.11 or newer.** Verified on 3.11 (the Docker image) and 3.14 from a clean
+clone. Three dependencies ship compiled wheels and carry a version floor rather than a
+hard pin, so a newer Python resolves a wheel instead of trying to build one.
+
 ```bash
 pip install -r requirements.txt
 cp .env.example .env          # optional: ANTHROPIC_API_KEY for the fallbacks
@@ -175,6 +179,12 @@ and the test suite disables it independently.
 | **Blanks vs defects** | `???`, `TBA`, `____MT` mean the sender does not know. That is `NEEDS_REVIEW`, never a mismatch — the false alarm the brief warns about |
 | **Wrong documents** | An invoice, packing list or certificate of origin sent instead of a BL, detected by the document's own title |
 | **Human in the loop** | Everything undecided reaches the review queue with all seven rows and the label each value was read under |
+
+## No Python at all?
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml up -d --build   # then localhost
+```
 
 ## Deployment
 

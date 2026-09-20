@@ -295,14 +295,38 @@ actually is: *deterministic where it is provably reliable, AI where it is not, a
 measured both.* Do not delete the rules-only number — it is a genuine strength — but stop
 leading with it.
 
-**A4 · Housekeeping — P1**
-- Delete the four dead CI variables.
-- **Mirror the repo to GitHub.** The form says "GitHub Repository Link" and we are on
-  GitLab. Probably fine, plausibly not; a mirror costs ten minutes and removes the
-  question.
-- Tell the organizers on Discord that the dataset they supplied contains real staff
-  names, work emails and phone numbers, and that a public repo is mandatory. Their data,
-  their call — but ours to raise, not to quietly decide. See "Data" below.
+**A4 · Housekeeping — partly DONE** ✅/⬜
+
+Done, in the repo:
+
+* **`pip install -r requirements.txt` from a clean clone was broken.** The rules require
+  "a clear README file that includes setup instructions", and a judge on a current
+  Python would have watched the very first command fail. `pydantic`, `rapidfuzz` and
+  `pymupdf` ship compiled wheels; a hard `==` pin means no wheel exists for a Python
+  newer than the pin, so pip tried to build them from source and stopped. Worse,
+  `rapidfuzz` is not optional — the bilingual labels resolve only through the fuzzy
+  pass, so the install failing takes real capability with it. The three now carry
+  floors. Verified end to end: clean clone on 3.14 installs, 228 tests pass, the
+  pipeline runs. The Docker image pins Python instead, which is where reproducibility
+  belongs.
+* README states the supported Python and offers Docker as the no-setup path.
+* Secret scan re-run over all 1,104 objects in the history: clean.
+* Confirmed nothing executable still reads the four dead CI variables — the pipeline
+  uses `DEPLOY_HOST` and nothing else.
+
+**Still needs Daniil's hands** (they need credentials I do not have):
+
+* ⬜ **Delete the four dead CI variables.** Settings → CI/CD → Variables: remove
+  `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `DEPLOY_USER`, `DEPLOY_PATH`. `DEPLOY_HOST`
+  stays. They are unused, but a private key sitting in a project's variables is worth
+  deleting on principle rather than leaving because it is harmless today.
+* ⬜ **Repository visibility: it stays public, and that is now a decision rather than an
+  accident.** The rules require a public repository link and a publicly accessible
+  prototype, so closing it is not available to us.
+* ⬜ **Mirror to GitHub.** The form says "GitHub Repository Link" and we are on GitLab.
+  Settings → Repository → Mirroring repositories, push to a new GitHub repo. Ten
+  minutes, removes a question nobody wants to answer during judging.
+* ⬜ **Message the organizers about the dataset.** Draft in "Data" below.
 
 **A5 · Learning from corrections — P2** *(Innovation, 10)*
 Mine a reviewer's accepted correction into `field_aliases` so the system improves on the
