@@ -50,15 +50,17 @@ code{font:12px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f1f3f
 
 /* top bar */
 .top{background:#101828;color:#fff;position:sticky;top:0;z-index:20}
-.top .row{max-width:1180px;margin:0 auto;padding:0 24px;display:flex;align-items:center;
- gap:26px;height:56px}
+.top .row{max-width:1260px;margin:0 auto;padding:0 20px;display:flex;align-items:center;
+ gap:18px;height:56px}
 .brand{font-weight:600;font-size:15px;white-space:nowrap}
 .brand small{display:block;font-weight:400;font-size:11px;opacity:.6;letter-spacing:.02em}
 nav{display:flex;gap:4px;margin-left:8px}
-nav a{color:#cfd6e0;padding:6px 12px;border-radius:6px;font-size:13px}
+nav a{color:#cfd6e0;padding:6px 11px;border-radius:6px;font-size:13px;white-space:nowrap}
 nav a:hover{background:#1d2939;text-decoration:none}
 nav a.on{background:#2a3648;color:#fff}
-.runbox{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12px}
+.runbox{margin-left:auto;display:flex;align-items:center;gap:9px;font-size:12px;
+ white-space:nowrap}
+@media(max-width:1100px){.runbox>span:nth-of-type(2){display:none}}
 .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
 .llm{display:flex;align-items:center;gap:7px;padding:4px 10px;border-radius:99px;
  background:#1d2939;font-size:12px;white-space:nowrap}
@@ -75,7 +77,7 @@ nav a.on{background:#2a3648;color:#fff}
 @keyframes p{50%{opacity:.25}}
 
 /* layout */
-main{max-width:1180px;margin:0 auto;padding:26px 24px 60px}
+main{max-width:1180px;margin:0 auto;padding:26px 20px 60px}
 h1{font-size:19px;margin:0 0 4px}
 .lede{color:var(--dim);margin:0 0 22px;font-size:13px}
 h2{font-size:14px;margin:30px 0 10px;letter-spacing:.01em}
@@ -159,6 +161,17 @@ a.att:hover{background:#dbeafe;text-decoration:none}
 .banner.green{background:var(--greenbg);color:#05603a;border:1px solid #abefc6}
 .banner.red{background:var(--redbg);color:#912018;border:1px solid #fecdca}
 .empty{color:var(--faint);padding:26px 16px;text-align:center;font-size:13px}
+.drop{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:760px){.drop{grid-template-columns:1fr}}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--dim);margin-bottom:5px;
+ text-transform:uppercase;letter-spacing:.04em}
+.field input[type=file]{font:inherit;font-size:13px;width:100%;padding:9px;
+ border:1px dashed #cfd4dc;border-radius:8px;background:#fafbfc}
+.field input[type=text],.field textarea{font:inherit;font-size:13px;width:100%;
+ padding:8px 10px;border:1px solid #cfd4dc;border-radius:7px}
+.field textarea{min-height:64px;resize:vertical}
+.note{font-size:12px;color:var(--dim);line-height:1.6}
 .md h1,.md h2,.md h3{margin:18px 0 8px}.md table{margin:10px 0}
 .md th,.md td{padding:6px 12px}
 """
@@ -244,24 +257,34 @@ if (document.readyState === 'loading') {
 def llm_switch(llm: dict | None) -> str:
     """The Claude on/off switch, in the header of every page.
 
-    Claude costs money and the rules do not need it, so it is off unless somebody turns
-    it on — here, without a redeploy or an ssh session. The switch shows what has been
-    spent since the process started, so "leave it on for the demo" is an informed
-    choice rather than a hopeful one.
+    AI costs money and the rules do not need it, so it is off unless somebody turns it
+    on — here, without a redeploy or an ssh session.
+
+    The figures are CUMULATIVE, from the ledger on disk, not per-process: a restart must
+    not appear to reset what has been spent. Cached answers are counted alongside paid
+    ones, because with a warm cache a run makes zero calls and a header that only
+    counted calls would read as though the AI had done nothing — when in fact it had
+    read the documents once and kept the answers.
     """
     if llm is None:
         return ""
+    if llm.get("cap_reached"):
+        return ('<span class=llm title="the cumulative spend ceiling was reached; '
+                'raise LLM_SPEND_CAP_USD to continue">AI <b>capped</b>'
+                f'<span class=spend>${llm.get("total_usd", 0):.2f}</span></span>')
     if not llm["has_key"]:
         return ('<span class=llm title="no ANTHROPIC_API_KEY on this machine">'
                 'AI <b>no key</b></span>')
     on = llm["enabled"]
-    spend = ""
-    if llm["calls"]:
-        spend = (f'<span class=spend>{llm["calls"]} calls · '
-                 f'${llm["estimated_usd"]:.2f}</span>')
+    parts = []
+    if llm.get("cache_hits"):
+        parts.append(f'{llm["cache_hits"]} cached')
+    if llm.get("total_usd"):
+        parts.append(f'${llm["total_usd"]:.2f} of ${llm.get("cap_usd", 0):.2f}')
+    spend = f'<span class=spend>{" · ".join(parts)}</span>' if parts else ""
     return (f'<span class="llm {"on" if on else ""}" '
-            f'title="{e(llm["model"])} · cap {llm["budget"]} calls/run · '
-            f'{e(llm["source"])}">'
+            f'title="{e(llm["model"])} · {llm.get("total_calls", 0)} paid calls total · '
+            f'{llm["budget"]}/run · {e(llm["source"])}">'
             f'<button class=sw onclick="toggleLlm(this)" aria-pressed="{str(on).lower()}"'
             f' aria-label="AI fallbacks"></button>'
             f'AI <b>{"on" if on else "off"}</b>{spend}</span>')
@@ -290,7 +313,8 @@ def page(title: str, body: str, *, active: str = "", run=None, llm=None) -> str:
 <div class=top><div class=row>
   <div class=brand>Shipping document verification<small>SI vs draft BL · APRIL operations inbox</small></div>
   <nav>{link('/', 'Overview', 'overview')}{link('/inbox', 'Inbox', 'inbox')}
-       {link('/review', 'Needs review', 'review')}{link('/report', 'Report', 'report')}</nav>
+       {link('/review', 'Needs review', 'review')}{link('/report', 'Report', 'report')}
+       {link('/try', 'Try your own', 'try')}</nav>
   <div class=runbox><span class="dot {e(status)}"></span><span>{e(note)}</span>
     {llm_switch(llm)}
     <button class=b-light onclick="runInbox(this)">Re-run</button></div>
@@ -524,6 +548,93 @@ def case(store, result: EmailResult, back: str = "/", llm=None) -> str:
 </div>""", active="", run=store.run, llm=llm)
 
 
+def try_page(store, llm=None, error: str | None = None, notice: str | None = None) -> str:
+    from .uploads import ALLOWED_SUFFIXES, MAX_FILE_BYTES
+
+    banner = ""
+    if error:
+        banner = f'<div class="banner red">{e(error)}</div>'
+    elif notice:
+        banner = f'<div class="banner green">{e(notice)}</div>'
+
+    formats = ", ".join(sorted(x for x in ALLOWED_SUFFIXES if x != ".json"))
+    ai_on = bool(llm and llm.get("enabled"))
+    ai_note = ("The AI fallback is <b>on</b>, so a layout the rules do not recognise "
+               "goes to Claude." if ai_on else
+               "The AI fallback is currently <b>off</b>, so anything the rules cannot "
+               "parse will be escalated rather than read by Claude.")
+
+    return page("Try your own", f"""
+<h1>Try it on your own documents</h1>
+<p class=lede>Nothing here is written into the bundled dataset, and you can put it back
+with one click.</p>
+{banner}
+<div class=drop>
+  <div class=pane>
+    <header>Compare one pair</header>
+    <form class=pad method=post action="/try" enctype="multipart/form-data">
+      <div class=field>
+        <label>Shipping Instruction</label>
+        <input type=file name=si accept="{e(formats)}" required>
+      </div>
+      <div class=field>
+        <label>Draft Bill of Lading</label>
+        <input type=file name=bl accept="{e(formats)}" required>
+      </div>
+      <div class=field>
+        <label>Email subject (optional)</label>
+        <input type=text name=subject placeholder="TO CONFIRM DOCS _ ...">
+      </div>
+      <div class=field>
+        <label>Email body (optional)</label>
+        <textarea name=body placeholder="Please check the draft BL against the SI."></textarea>
+      </div>
+      <button class=b-red type=submit>Compare them</button>
+      <p class=note style="margin-top:12px">
+        {e(formats)} · up to {MAX_FILE_BYTES // 1024 // 1024} MB each.<br>
+        {ai_note}
+      </p>
+    </form>
+  </div>
+
+  <div class=pane>
+    <header>Load a whole inbox</header>
+    <form class=pad method=post action="/try/inbox" enctype="multipart/form-data">
+      <div class=field>
+        <label>A .zip shaped like <code>data/</code></label>
+        <input type=file name=archive accept=".zip" required>
+      </div>
+      <p class=note>
+        <code>inbox/email_*.json</code> — each with <code>email_id</code>,
+        <code>from</code>, <code>subject</code>, <code>body</code> and
+        <code>attachments</code><br>
+        <code>attachments/</code> — the files those records point at, named
+        <code>&lt;id&gt;_SI.*</code> and <code>&lt;id&gt;_BL.*</code>
+      </p>
+      <button type=submit>Load and process</button>
+    </form>
+    <div class=actions>
+      <form method=post action="/try/reset" style="margin:0">
+        <button type=submit>Back to the bundled inbox</button>
+      </form>
+      <span class=hint>currently {store.counts().get("emails", 0)} emails loaded</span>
+    </div>
+  </div>
+</div>
+
+<h2>What happens to an uploaded document</h2>
+<div class="pane"><div class=pad><p class=note>
+The same code path the bundled inbox takes — no special case. The rules read every label
+they recognise, aligning by meaning rather than by header text, so
+<code>Load Port</code> and <code>Port of Loading</code> land in the same field. Anything
+they cannot parse, or a scan with no text layer, goes to Claude; anything neither can
+settle is escalated with the evidence rather than guessed.<br><br>
+An answer is cached against the exact bytes of the request, so running the same
+documents again is free — but the <b>first</b> pass over anything new is a real call.
+</p></div></div>
+""", active="try", run=store.run, llm=llm)
+
+
 def report_page(store, markdown: str, llm=None) -> str:
     return page("Report", f"""
 <h1>Discrepancy report</h1>
@@ -577,4 +688,4 @@ def _inline(text: str) -> str:
 
 
 __all__ = ["page", "llm_switch", "overview", "inbox", "review_list", "case",
-           "report_page", "CSS", "JS"]
+           "try_page", "report_page", "CSS", "JS"]

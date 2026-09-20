@@ -17,6 +17,7 @@ anthropic==0.39.0
 # --- service layer ---
 fastapi==0.115.2
 uvicorn[standard]==0.31.1
+python-multipart==0.0.12  # file uploads on /try
 
 # --- dev ---
 pytest==8.3.3
