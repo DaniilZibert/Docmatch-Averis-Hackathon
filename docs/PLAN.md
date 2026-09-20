@@ -65,6 +65,7 @@ Four screens at <https://docmatch.tech>, no command to start anything:
 | Inbox | all 520 emails, filterable and searchable |
 | Case | the email beside the two documents, field by field, with the decision |
 | Report | the discrepancy report, ready to send on |
+| Try your own | a judge uploads an SI and a draft BL, or a whole inbox, and watches it run |
 
 A case shows which label each value was read from — *"read as SI 'Consignee
 (Non-Negotiable)' vs BL 'To the Order of'"* — which is the brief's "the same
@@ -90,7 +91,7 @@ the pipeline and no credentials held by CI. [OPERATIONS.md](OPERATIONS.md).
 
 ### Validation
 
-197 tests, free and offline. `scripts/evaluate.py` saves each run and diffs two of them
+226 tests, free and offline. `scripts/evaluate.py` saves each run and diffs two of them
 email by email with an error breakdown per scoring axis. `scripts/check_robustness.sh`
 scores against freshly generated inboxes. `scripts/llm_smoke.py` proves the three
 Claude paths work on input the rules cannot handle.
@@ -156,7 +157,7 @@ Preliminary, 100 points. Our standing, honestly assessed:
 | Working Core Prototype | **25** | strong — the core flow works end to end, deployed |
 | System Design & Architecture | 15 | strong — needs an architecture diagram in the deck |
 | Technology Integration | 15 | **the AI risk lands here** |
-| Technical Feasibility & Validation | 15 | strong — 197 tests, six unseen datasets, error analysis |
+| Technical Feasibility & Validation | 15 | strong — 226 tests, six unseen datasets, error analysis |
 | Problem Statement Understanding | 10 | strong — needs saying out loud in the deck |
 | Innovation & Solution Approach | 10 | thin — nothing distinctive is *explained* yet |
 | Practical Value & Potential | 10 | needs the real-inbox path and cost numbers |
@@ -251,6 +252,8 @@ inbox: IMAP or Microsoft Graph, `.msg` parsing, what changes and what does not. 
 *Self-contained — new files only.*
 
 **B4 · Fresh-eyes review — P1**
+Include `/try`: upload two documents of your own invention and see whether the result
+is understandable to someone who did not build it.
 Read `CLAUDE.md` first: several things in the extractors look like bugs and are
 deliberate, and that section says which. Then try to break <https://docmatch.tech>.
 Anything confusing to you is confusing to a judge.

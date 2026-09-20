@@ -57,7 +57,7 @@ out of a document with no recognisable labels.
 pip install -r requirements.txt
 cp .env.example .env          # optional: ANTHROPIC_API_KEY for the fallbacks
 
-pytest -q                     # 197 tests — free, offline, no API calls
+pytest -q                     # 226 tests — free, offline, no API calls
 python -m src.pipeline        # 520 emails -> submission.json + a run summary
 uvicorn src.api.main:app --reload    # then open http://localhost:8000
 ```
@@ -73,6 +73,7 @@ nothing to load.
 | **Inbox** | all 520 emails, filterable by category and outcome, searchable |
 | **Case** | one email beside the two documents, field by field, with the decision |
 | **Report** | the discrepancy report, ready to send on |
+| **Try your own** | upload an SI and a draft BL, or a whole inbox, and see it run |
 
 A case shows the email on the left and the seven compared fields on the right, with the
 differing rows highlighted and the label each value was read under — *"read as SI
@@ -84,6 +85,21 @@ counters and the report update immediately and the app moves to the next case.
 Rows blank on one side are deliberately *not* pre-ticked: a missing value is why we
 stopped, not a discrepancy, and the screen should not walk a reviewer into confusing
 the two.
+
+### Bring your own documents
+
+`/try` takes an SI and a draft BL in any of the four formats and runs them through the
+same code path the bundled inbox takes. It also takes a `.zip` shaped like `data/` to
+swap the whole working dataset, with one button to put the bundled one back.
+
+This is where the hybrid stops being a claim: an uploaded document is by definition a
+layout nothing has seen, so the rules parse what they recognise and the AI reads the
+rest. Tested on a booking note written entirely in unfamiliar labels — all seven fields
+came back, `seven x 40'HC` was read as 7, the gross weight was taken rather than the net
+sitting next to it, and the planted discrepancy was found.
+
+Answers are cached against the exact bytes, so running the same documents again is free
+— but the first pass over anything new is a real call.
 
 ### The AI switch
 

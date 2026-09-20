@@ -47,7 +47,7 @@ three things that quietly bill on AWS (load balancer, NAT gateway, RDS) are all 
 
 ```
 git push origin main
-   └─ test    197 tests, then a real pass over 520 emails, submission validated
+   └─ test    226 tests, then a real pass over 520 emails, submission validated
    └─ build   build the image, prove the container starts, push to the GitLab registry
    └─ deploy  wait until /health reports this commit
                   ↑
@@ -131,18 +131,19 @@ open, and the spending is defended somewhere else entirely.
 
 ### The three defences, none of which restricts anybody
 
-**1. Every AI answer is cached on disk.** Each call is a pure function of bytes that do
-not change: the same six scanned PDFs, the same document text, the same email. The
-response is stored under a hash of the model and the request, in a volume that survives
-restarts. The first run pays; every run after it is free.
+**1. Every AI answer is cached on disk**, keyed by a hash of the model and the exact
+request. The cache is not pre-filled — the first pass over any document is a genuine
+call, because a demo that never calls the AI is not a demo of the AI. What it stops is
+the *second* pass costing anything:
 
 ```
-run 1:  6 paid calls, 0 from cache, $0.1078
-run 2:  0 paid calls, 6 from cache, $0.1078      <- measured, not hoped for
+upload a pair of never-seen documents:   2 paid calls,  $0.0104
+upload the identical files again:        0 paid calls,  $0.0000
+change one line of the BL:               1 paid call   (the SI came from cache)
 ```
 
-Somebody hammering the button now costs nothing, and we did not have to take the button
-away from them to get there. This is the defence that actually works.
+So somebody pressing `/run` in a loop pays for the first press and nothing after it, and
+we did not have to take the button away from them.
 
 **2. A cumulative spend ceiling** (`LLM_SPEND_CAP_USD`, default $2.50), written to disk
 on every single call rather than at the end of a run — a process killed mid-run still
@@ -154,6 +155,16 @@ still press the button, just not a thousand times a second.
 
 Limiting our own resource consumption is not the same as limiting access, and that
 distinction is why this arrangement satisfies the rule.
+
+### Uploads are the case where the AI genuinely earns its place
+
+`/try` lets anyone hand the system a document it has never seen. That is a real cost
+vector and it is supposed to be: the rules parse the labels they recognise, Claude reads
+the rest, and the ceiling is what bounds it. A booking note written entirely in
+unfamiliar labels ("Party sending the goods", "Taking on board at", "Boxes in this lot")
+came back with all seven fields, `seven x 40'HC` read as 7, the gross weight taken
+rather than the net sitting beside it, and the planted discrepancy found — for about a
+cent.
 
 ### The switch means off, cache included
 
