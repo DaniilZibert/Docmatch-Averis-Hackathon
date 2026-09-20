@@ -21,6 +21,7 @@ submission.json
 out/*
 !out/ablation.md
 !out/ablation.json
+!out/unseen-layouts.md
 
 # local run artifacts
 .venv/

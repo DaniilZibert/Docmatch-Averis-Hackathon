@@ -252,6 +252,29 @@ pass is about $3.50, most of the team budget, to answer a question a sample answ
 
 *Reproduce:* `python scripts/ablation.py --ground-truth <key> --all --sample 50 --pairs 8`
 
+**A1b · The second table — DONE** ✅ *(Technology Integration, 15)*
+
+A1 alone is dangerous. "Six documents out of 248" against a rubric whose weak band reads
+*"integration is superficial… or primarily cosmetic"*, and a rule that demands AI as a
+key component, is an argument a tired judge can make against us using our own evidence.
+
+So the second measurement asks the question A1 cannot: what do the rules recover from a
+layout they were not written for? Five SI/BL pairs, five unrelated layouts, known values,
+one planted discrepancy each.
+
+| configuration | documents read | field values | SI values correct | discrepancies found | cost |
+|---|---|---|---|---|---|
+| Rules only | 0/10 | 0/70 | 0/35 | 0/5 | $0.0000 |
+| **Rules + AI** | **10/10** | **70/70** | **35/35** | **5/5** | $0.0464 |
+
+**Show these two tables in this order, and never A1 alone.** The first answers "why is
+your architecture shaped like that" — Feasibility and System Design. The second answers
+"so what is the AI actually for" — Technology Integration. A1 on its own invites the
+conclusion we are trying to avoid.
+
+*Reproduce:* `python scripts/unseen_layouts.py --with-ai` ·
+artifact [out/unseen-layouts.md](../out/unseen-layouts.md)
+
 **A2 · What only AI can do — DONE** ✅ *(Technology Integration, 15)*
 
 Two measurements, both real:

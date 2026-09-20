@@ -1,0 +1,10 @@
+DRAFT B/L WORKSHEET
+=====================================================
+FROM PARTY      | ASIA PACIFIC PAPERBOARD TRADING PTE LTD
+TO PARTY        | BALTIC BOARD OU
+TELL ON ARRIVAL | BALTIC BOARD OU
+SHIPS FROM      | SINGAPORE
+SHIPS TO        | TALLINN, ESTONIA
+UNITS           | 9 x 40'HC
+MASS LADEN KG   | 195,450
+=====================================================

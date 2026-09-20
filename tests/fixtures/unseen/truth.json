@@ -1,0 +1,72 @@
+{
+  "dotted": {
+    "defect_fields": [
+      "port_of_discharge"
+    ],
+    "si": {
+      "shipper": "NORTHWIND TIMBER EXPORTS SDN BHD",
+      "consignee": "HELLAS PAPER TRADING SA",
+      "notify_party": "HELLAS PAPER TRADING SA",
+      "port_of_loading": "PORT KLANG (WESTPORT), MALAYSIA",
+      "port_of_discharge": "PIRAEUS, GREECE",
+      "container_count": 7,
+      "gross_weight_kg": 154300
+    }
+  },
+  "numbered": {
+    "defect_fields": [
+      "container_count"
+    ],
+    "si": {
+      "shipper": "SUMATRA PULP VENTURES PT",
+      "consignee": "ANATOLIA KAGIT AS",
+      "notify_party": "ANATOLIA KAGIT AS",
+      "port_of_loading": "BELAWAN, INDONESIA",
+      "port_of_discharge": "IZMIR, TURKEY",
+      "container_count": "11",
+      "gross_weight_kg": 238900
+    }
+  },
+  "prose": {
+    "defect_fields": [
+      "consignee"
+    ],
+    "si": {
+      "shipper": "APRIL FAR EAST (M) SDN BHD",
+      "consignee": "CASABLANCA PAPETERIE SARL",
+      "notify_party": "CASABLANCA PAPETERIE SARL",
+      "port_of_loading": "PASIR GUDANG, MALAYSIA",
+      "port_of_discharge": "CASABLANCA, MOROCCO",
+      "container_count": "4",
+      "gross_weight_kg": 88120
+    }
+  },
+  "columnar": {
+    "defect_fields": [
+      "gross_weight_kg"
+    ],
+    "si": {
+      "shipper": "ASIA PACIFIC PAPERBOARD TRADING PTE LTD",
+      "consignee": "BALTIC BOARD OU",
+      "notify_party": "BALTIC BOARD OU",
+      "port_of_loading": "SINGAPORE",
+      "port_of_discharge": "TALLINN, ESTONIA",
+      "container_count": "9",
+      "gross_weight_kg": 196450
+    }
+  },
+  "bilingual": {
+    "defect_fields": [
+      "notify_party"
+    ],
+    "si": {
+      "shipper": "APRIL FINE PAPER TRADING",
+      "consignee": "PAPETERIES DU RHONE SAS",
+      "notify_party": "PAPETERIES DU RHONE SAS",
+      "port_of_loading": "NANTONG, CHINA",
+      "port_of_discharge": "FOS-SUR-MER, FRANCE",
+      "container_count": "6",
+      "gross_weight_kg": 131700
+    }
+  }
+}

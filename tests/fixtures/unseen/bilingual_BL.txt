@@ -1,0 +1,9 @@
+CONNAISSEMENT — PROJET / DRAFT BILL OF LADING
+
+Expediteur (sender of merchandise) : APRIL FINE PAPER TRADING
+Destinataire (goods go to)         : PAPETERIES DU RHONE SAS
+Prevenir a l'arrivee (tell them)   : LYON PAPIER DISTRIBUTION SARL
+Embarquement (goods go aboard at)  : NANTONG, CHINA
+Debarquement (goods come off at)   : FOS-SUR-MER, FRANCE
+Colis (how many boxes)             : 6 x 20'FCL
+Masse brute (everything, kg)       : 131,700

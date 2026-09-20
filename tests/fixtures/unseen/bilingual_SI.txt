@@ -1,0 +1,10 @@
+INSTRUCTION D'EXPEDITION / SHIPPING NOTE
+
+Expediteur (sender of merchandise) : APRIL FINE PAPER TRADING
+Destinataire (goods go to)         : PAPETERIES DU RHONE SAS
+Prevenir a l'arrivee (tell them)   : PAPETERIES DU RHONE SAS
+Embarquement (goods go aboard at)  : NANTONG, CHINA
+Debarquement (goods come off at)   : FOS-SUR-MER, FRANCE
+Colis (how many boxes)             : 6 x 20'FCL
+Masse brute (everything, kg)       : 131,700
+Masse nette (cargo alone, kg)      : 127,200
