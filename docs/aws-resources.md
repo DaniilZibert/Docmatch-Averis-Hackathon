@@ -35,6 +35,17 @@ aws ec2 authorize-security-group-ingress --group-id sg-0ac5e3caa5fec55d0 \
 Do not "fix" it by opening 22 to `0.0.0.0/0`. A box on a public IP with open ssh is
 found by scanners within minutes.
 
+## The CI deploy key
+
+GitLab CI logs in with its own ed25519 key, not the one above. The private half and the
+pinned `known_hosts` are in `~/sdoc-ci-credentials/` on Daniil's laptop with a README
+saying which GitLab variable each one goes in — deliberately not in this repository,
+which is public. The public half is already in the server's `authorized_keys`.
+
+If the instance is ever rebuilt, regenerate all of it: the host key changes, the pinned
+`known_hosts` stops matching, and the deploy job fails at the ssh step. That is the
+single most common way this breaks.
+
 ## Costs
 
 t3.micro and 16 GB of gp3 are inside the 12-month free tier. An Elastic IP is free
