@@ -114,6 +114,13 @@ th{text-align:left;font-size:11px;font-weight:500;color:var(--dim);text-transfor
 td{padding:9px 16px;border-bottom:1px solid #f0f2f4;vertical-align:top}
 tbody tr:last-child td{border-bottom:none}
 tbody tr:hover{background:#fafbfc}
+/* a whole row is a link: say so with the cursor, and make the hover unmistakable
+   rather than the barely-there tint a plain table gets */
+tbody tr.row{cursor:pointer}
+tbody tr.row:hover{background:#eef4ff}
+tbody tr.row:hover td.id a{text-decoration:underline}
+tbody tr.row:hover td.sub{color:var(--ink)}
+tbody tr.row:focus-within{background:#eef4ff;outline:2px solid var(--blue);outline-offset:-2px}
 td.id{font-family:ui-monospace,Menlo,monospace;font-size:12px;white-space:nowrap}
 td.sub{color:var(--dim);max-width:400px;overflow:hidden;text-overflow:ellipsis;
  white-space:nowrap}
@@ -185,6 +192,28 @@ async function post(path, body) {
   return fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'},
                       body: body ? JSON.stringify(body) : null});
 }
+
+// A list row is a link to its case. The <a> on the id still does the real work — this
+// only widens the target, because one small link in the first column did not read as
+// "open this" and people could not find their way in.
+//
+// Three things it must not do: hijack a click on something that is already interactive,
+// swallow a middle-click or ctrl-click (those should open a tab), or fire when somebody
+// was selecting text.
+document.addEventListener('click', (ev) => {
+  const row = ev.target.closest('tr.row');
+  if (!row) return;
+  if (ev.target.closest('a, button, input, label, select, textarea')) return;
+  if (ev.button !== 0 || ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return;
+  if (window.getSelection && String(window.getSelection())) return;
+  location.href = row.dataset.href;
+});
+document.addEventListener('auxclick', (ev) => {        // middle click opens a tab
+  const row = ev.target.closest('tr.row');
+  if (!row || ev.button !== 1) return;
+  if (ev.target.closest('a, button, input')) return;
+  window.open(row.dataset.href, '_blank');
+});
 
 async function decide(id, status, back) {
   const box = document.getElementById('case-' + id);
@@ -332,8 +361,16 @@ def stat_cards(counts: dict[str, int]) -> str:
 
 
 def row_link(result: EmailResult, email: EmailRecord | None, settled: bool) -> str:
+    """One row of a list, clickable anywhere.
+
+    The id keeps a real <a> so middle-click, open-in-new-tab and keyboard navigation
+    still work — but `data-href` on the row makes the whole thing a click target,
+    because a single small link in the first column does not read as "you can open
+    this" and people were not finding their way into a case.
+    """
     subject = e(email.subject) if email else ""
-    return (f'<tr><td class=id><a href="/case/{e(result.email_id)}">{e(result.email_id)}</a></td>'
+    return (f'<tr class=row data-href="/case/{e(result.email_id)}">'
+            f'<td class=id><a href="/case/{e(result.email_id)}">{e(result.email_id)}</a></td>'
             f'<td class=sub>{subject}</td>'
             f'<td><span class=cat>{e(result.category.value)}</span></td>'
             f'<td><span class="tag t-{e(result.status.value)}">{e(result.status.value)}</span>'

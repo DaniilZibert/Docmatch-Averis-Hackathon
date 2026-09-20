@@ -169,3 +169,24 @@ def test_the_run_watcher_waits_for_the_dom(client):
 def test_the_page_advertises_the_run_state_for_the_watcher(client):
     """The watcher keys off data-run; if the attribute goes, it silently never fires."""
     assert 'data-run="ready"' in client.get("/").text
+
+
+def test_a_whole_list_row_is_a_link_to_its_case(client):
+    """A single small link in the first column did not read as "open this" — people
+    could not find their way into a case. The row carries the target now."""
+    for path in ("/inbox", "/review", "/"):
+        page = client.get(path).text
+        if "class=id" not in page:
+            continue                                  # an empty list on this screen
+        assert 'tr class=row data-href="/case/' in page, path
+        # the id must stay a real anchor: middle-click and open-in-new-tab depend on it
+        assert '<td class=id><a href="/case/' in page, path
+
+
+def test_the_row_click_handler_leaves_real_interactions_alone(client):
+    """Widening the click target must not swallow a link, a button, a modifier-click or
+    a text selection — each of those has its own behaviour a user expects."""
+    script = client.get("/inbox").text
+    handler = script[script.index("tr.row"):script.index("async function decide")]
+    for guard in ("a, button, input", "metaKey", "ctrlKey", "getSelection"):
+        assert guard in handler, f"the click handler does not check {guard}"
