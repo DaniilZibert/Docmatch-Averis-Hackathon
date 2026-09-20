@@ -199,12 +199,29 @@ ssh-keyscan <ip> > known_hosts        # paste this file into SSH_KNOWN_HOSTS
 Never reuse your laptop's key for this. Pinning `SSH_KNOWN_HOSTS` is what stops the
 deploy job from happily trusting an impostor host.
 
-The server also needs to be able to pull from the registry:
+The server does **not** need registry credentials while this project is public —
+GitLab serves anonymous pulls for public projects, and the deploy job relies on that.
+If you make the repository private, log in once on the server rather than threading
+credentials through CI:
 
 ```bash
-# on the server, once
-docker login registry.gitlab.com -u <deploy-token-user> -p <deploy-token>
+# on the server, once; persists in ~/.docker/config.json
+docker login registry.gitlab.com -u <deploy-token-user> -p <read_registry deploy token>
 ```
+
+### Two things that bit us here
+
+**An escaped variable in the ssh heredoc expands on the SERVER.** The heredoc is
+unquoted, so the runner expands it — which is what you want for CI variables like
+`$CI_REGISTRY_PASSWORD` or `$IMAGE`. Writing `\$VAR` sends the name literally and the
+server resolves it against its own (empty) environment. That is how the first deploy
+job spent three runs failing inside its own `docker login`.
+
+**`curl -f` counts a redirect as success.** Once Caddy has a certificate it answers
+port 80 with a 308, so `curl -fsS http://$DEPLOY_HOST/health` returns 0 without ever
+reaching the app: a deploy that left the service dead reported healthy. The check
+follows redirects and matches on `"status":"ok"` in the body instead. Any health check
+that only looks at an exit code has this hole.
 
 ## Operations
 
