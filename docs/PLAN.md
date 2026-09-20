@@ -294,11 +294,14 @@ Two measurements, both real:
   calls, $0.0104. Reproduce through **Upload new data** on the site, or
   `scripts/llm_smoke.py`.
 
-**A3 · Reframe our own materials — P0** *(30 minutes)*
-README and the header currently lead with the absence of AI. Change the story to what it
-actually is: *deterministic where it is provably reliable, AI where it is not, and we
-measured both.* Do not delete the rules-only number — it is a genuine strength — but stop
-leading with it.
+**A3 · Reframe our own materials — DONE** ✅ *(landed in `2bbe270`)*
+README led with the absence of AI; it now opens on what the thing actually is —
+*deterministic where that is provably reliable, AI where it is not, and we measured
+both.* The rules-only 1.0000 is still there, as a strength rather than as the headline.
+
+One piece of this resolves itself: the live header reads `no LLM calls` / `AI off`
+because that is the true state today, and A0 changes it at submission time. Nothing to
+edit — just do not let a judge see the page before A0 has run.
 
 **A4 · Housekeeping — partly DONE** ✅/⬜
 
