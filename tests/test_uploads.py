@@ -166,3 +166,61 @@ def test_a_bad_upload_explains_itself_rather_than_500ing():
         })
     assert response.status_code == 400
     assert "we read" in response.text
+
+
+# --- post/redirect/get -----------------------------------------------------
+
+def _client():
+    import os
+    os.environ["SDOC_NO_AUTORUN"] = "1"
+    from fastapi.testclient import TestClient
+    from src.api.main import app
+    return TestClient(app)
+
+
+def test_a_successful_upload_redirects_instead_of_rendering():
+    """Regression: "processing the inbox…" hung forever after a zip upload.
+
+    A form POST replaces the document with the response. That page relies on a script
+    that polls /health and then calls location.reload() — but on a POST response reload
+    re-submits the POST, so browsers prompt or refuse and the banner never clears. The
+    only escape was to navigate away by hand.
+
+    Every successful upload must therefore answer 3xx and land the browser on a GET.
+    """
+    record = {"email_id": "email_001", "from": "a@b.c", "subject": "s", "body": "b",
+              "attachments": ["attachments/email_001_SI.txt"]}
+    archive = zip_of({"inbox/email_001.json": json.dumps(record).encode(),
+                      "attachments/email_001_SI.txt": SI})
+
+    with _client() as client:
+        r = client.post("/upload/inbox", files={"archive": ("i.zip", archive)},
+                        follow_redirects=False)
+        assert r.status_code == 303, "an upload that renders in place cannot be reloaded"
+        assert r.headers["location"].startswith("/upload?loaded=")
+
+        r = client.post("/upload/reset", follow_redirects=False)
+        assert r.status_code == 303
+        assert r.headers["location"] == "/upload?reset=1"
+
+        r = client.post("/upload", files={
+            "si": ("si.txt", SI), "bl": ("bl.txt", BL)}, follow_redirects=False)
+        assert r.status_code == 303
+        assert r.headers["location"].startswith("/case/upload_")
+
+
+def test_the_redirect_target_still_shows_what_happened():
+    """The notice has to survive the redirect, or the user is told nothing."""
+    with _client() as client:
+        page = client.get("/upload?loaded=42").text
+        assert "Loaded 42 emails" in page
+        assert client.get("/upload?reset=1").text.count("bundled inbox") >= 1
+
+
+def test_a_failed_upload_still_renders_in_place():
+    """Nothing to reload, and the message belongs beside the form it came from."""
+    with _client() as client:
+        r = client.post("/upload/inbox", files={"archive": ("x.zip", b"not a zip")},
+                        follow_redirects=False)
+        assert r.status_code == 400
+        assert "does not open as a zip" in r.text

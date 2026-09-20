@@ -174,14 +174,32 @@ def attachment(path: str) -> Response:
 # ---------------------------------------------------------------------------
 # Uploading new data
 # ---------------------------------------------------------------------------
+# Every successful upload answers 303 and sends the browser to a GET. That is the
+# post/redirect/get pattern, and here it is not a stylistic choice:
+#
+# A form POST replaces the document with the response. The page that comes back says
+# "processing the inbox…" and relies on a script that polls /health and then calls
+# location.reload() once the run lands. On a POST response, reload() re-submits the
+# POST — browsers prompt or refuse — so the banner sat there forever and the only way
+# out was to navigate somewhere else by hand. Redirecting first makes the page an
+# ordinary GET, and reload does what it says.
+#
+# Errors still render in place with a 4xx: there is nothing to reload, and the reader
+# needs the message next to the form they just used.
 # An uploaded document is a layout we have never seen, which is exactly when the hybrid
 # has to earn its keep: the rules parse what they recognise, Claude reads the rest.
 # Nothing is written into data/ — uploads live in a scratch directory and the bundled
 # inbox is always one click away.
 
 @app.get("/upload", response_class=HTMLResponse)
-def screen_upload() -> str:
-    return ui.upload_page(STORE, _llm())
+def screen_upload(loaded: int | None = None, reset: bool = False,
+                  error: str | None = None) -> str:
+    notice = None
+    if loaded:
+        notice = f"Loaded {loaded} emails — processing them now."
+    elif reset:
+        notice = "Back to the bundled inbox — reprocessing."
+    return ui.upload_page(STORE, _llm(), error=error, notice=notice)
 
 
 @app.post("/upload", response_class=HTMLResponse)
@@ -200,7 +218,8 @@ async def upload_pair(si: UploadFile = File(...), bl: UploadFile = File(...),
     STORE.results[result.email_id] = result          # so /case/{id} can render it
     STORE.emails[result.email_id] = email
     uploads.cleanup()
-    return HTMLResponse(ui.case(STORE, result, back="/upload", llm=_llm()))
+    # Redirect rather than render. See the note on _see_other below.
+    return RedirectResponse(f"/case/{result.email_id}?back=/upload", status_code=303)
 
 
 @app.post("/upload/inbox", response_class=HTMLResponse)
@@ -214,10 +233,8 @@ async def upload_inbox(archive: UploadFile = File(...)) -> HTMLResponse:
 
     DATA_DIR = str(new_dir)
     STORE.start_run(DATA_DIR)
-    return HTMLResponse(ui.upload_page(STORE, _llm(),
-                                    notice=f"Loaded {len(list((new_dir / 'inbox').glob('*.json')))} "
-                                           f"emails — processing them now."),
-                        status_code=200)
+    count = len(list((new_dir / "inbox").glob("*.json")))
+    return RedirectResponse(f"/upload?loaded={count}", status_code=303)
 
 
 @app.post("/upload/reset", response_class=HTMLResponse)
@@ -226,8 +243,7 @@ def upload_reset() -> HTMLResponse:
     global DATA_DIR
     DATA_DIR = config.data_dir()
     STORE.start_run(DATA_DIR)
-    return HTMLResponse(ui.upload_page(STORE, _llm(),
-                                    notice="Back to the bundled inbox — reprocessing."))
+    return RedirectResponse("/upload?reset=1", status_code=303)
 
 
 # /try was the first name for this screen. The site is public and the path may have
