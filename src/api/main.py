@@ -27,6 +27,7 @@ import json
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi import Response
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel
 
@@ -160,14 +161,16 @@ def submission() -> JSONResponse:
 # the review screen
 # ---------------------------------------------------------------------------
 _STYLE = """
+*{box-sizing:border-box}
 body{font:14px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;margin:0;
  background:#f6f7f9;color:#15181d}
-header{background:#1d2430;color:#fff;padding:18px 28px}
+header{background:#1d2430;color:#fff;padding:18px 28px;position:sticky;top:0;z-index:5}
 header h1{margin:0;font-size:17px;font-weight:600}
 header p{margin:4px 0 0;opacity:.7;font-size:13px}
-main{padding:24px 28px;max-width:1100px}
-.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px}
-.card{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:14px 18px;min-width:120px}
+main{padding:24px 28px;max-width:1120px}
+h2{font-size:15px;margin:28px 0 12px}
+.cards{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.card{background:#fff;border:1px solid #e3e6ea;border-radius:8px;padding:14px 18px;min-width:118px}
 .card b{display:block;font-size:24px;font-weight:600}
 .card span{font-size:12px;color:#697586;text-transform:uppercase;letter-spacing:.04em}
 .case{background:#fff;border:1px solid #e3e6ea;border-radius:8px;margin-bottom:14px;overflow:hidden}
@@ -176,38 +179,98 @@ main{padding:24px 28px;max-width:1100px}
 .tag{font-size:11px;padding:2px 8px;border-radius:99px;font-weight:600;letter-spacing:.03em}
 .MISMATCH{background:#fdecec;color:#b42318}.NEEDS_REVIEW{background:#fff5e5;color:#b54708}
 .OK{background:#e9f7ef;color:#067647}
+.done{margin-left:auto;font-size:11px;color:#067647;font-weight:600}
 .why{padding:10px 18px;color:#475467;font-size:13px}
 table{border-collapse:collapse;width:100%;font-size:13px}
-th,td{text-align:left;padding:7px 18px;border-top:1px solid #eef0f3}
+th,td{text-align:left;padding:7px 18px;border-top:1px solid #eef0f3;vertical-align:top}
 th{color:#697586;font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
-tr.bad td{background:#fef6f6}tr.bad td:first-child{font-weight:600;color:#b42318}
+td.pick{width:34px;padding-right:0}
+tr.bad td{background:#fef6f6}tr.bad td.f{font-weight:600;color:#b42318}
 .src{color:#98a2b3;font-size:11px}
+.actions{padding:12px 18px;border-top:1px solid #eef0f3;background:#fbfcfd;
+ display:flex;gap:8px;align-items:center}
+button{font:inherit;font-size:13px;padding:6px 14px;border-radius:6px;cursor:pointer;
+ border:1px solid #cdd3da;background:#fff}
+button:hover{background:#f2f4f7}
+button.primary{background:#b42318;border-color:#b42318;color:#fff}
+button.primary:hover{background:#96201a}
+button.clean{background:#067647;border-color:#067647;color:#fff}
+button.clean:hover{background:#05603a}
+.hint{color:#98a2b3;font-size:12px;margin-left:auto}
 .empty{color:#98a2b3;padding:20px 0}
 """
 
+_SCRIPT = """
+async function decide(id, status) {
+  const box = document.getElementById('case-' + id);
+  const fields = status === 'MISMATCH'
+    ? [...box.querySelectorAll('input[type=checkbox]:checked')].map(c => c.value)
+    : [];
+  if (status === 'MISMATCH' && fields.length === 0) {
+    alert('Tick the fields that actually differ, or mark the case clean.');
+    return;
+  }
+  box.querySelectorAll('button').forEach(b => b.disabled = true);
+  const r = await fetch('/review/' + id, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: status, defect_fields: fields, reviewer: 'reviewer'})
+  });
+  if (r.ok) { location.reload(); }
+  else { alert('Could not save: ' + r.status); box.querySelectorAll('button').forEach(b => b.disabled = false); }
+}
+"""
 
-def _case_html(result: EmailResult) -> str:
+
+def _case_html(result: EmailResult, actionable: bool = True) -> str:
     rows = []
     for row in result.comparisons:
-        cls = "" if row.match else ' class="bad"'
+        bad = not row.match
         note = f'<div class="src">{html.escape(row.note)}</div>' if row.note else ""
+        pick = (f'<td class="pick"><input type="checkbox" value="{html.escape(row.field)}"'
+                f'{" checked" if bad else ""}></td>') if actionable else ""
         rows.append(
-            f"<tr{cls}><td>{html.escape(row.field)}</td>"
+            f'<tr{" class=bad" if bad else ""}>{pick}'
+            f'<td class="f">{html.escape(row.field)}</td>'
             f"<td>{html.escape(str(row.si_value if row.si_value is not None else '—'))}</td>"
             f"<td>{html.escape(str(row.bl_value if row.bl_value is not None else '—'))}{note}</td></tr>")
-    table = (f"<table><tr><th>field</th><th>Shipping Instruction</th>"
-             f"<th>draft Bill of Lading</th></tr>{''.join(rows)}</table>") if rows else ""
-    return (f'<div class="case"><h3>{html.escape(result.email_id)}'
-            f'<span class="tag {result.status.value}">{result.status.value}</span></h3>'
+    head = ('<tr><th></th><th>field</th><th>Shipping Instruction</th>'
+            '<th>draft Bill of Lading</th></tr>') if actionable else            ('<tr><th>field</th><th>Shipping Instruction</th>'
+            '<th>draft Bill of Lading</th></tr>')
+    table = f"<table>{head}{''.join(rows)}</table>" if rows else ""
+
+    resolved = result.email_id in RESOLUTIONS
+    actions = ""
+    if actionable and not resolved:
+        eid = html.escape(result.email_id)
+        actions = (
+            '<div class="actions">'
+            f"<button class=\"primary\" onclick=\"decide('{eid}','MISMATCH')\">"
+            "Confirm mismatch</button>"
+            f"<button class=\"clean\" onclick=\"decide('{eid}','OK')\">"
+            "No mismatch</button>"
+            f"<button onclick=\"decide('{eid}','NEEDS_REVIEW')\">Leave open</button>"
+            '<span class="hint">tick the rows that really differ, then confirm</span>'
+            "</div>")
+
+    return (f'<div class="case" id="case-{html.escape(result.email_id)}">'
+            f'<h3>{html.escape(result.email_id)}'
+            f'<span class="tag {result.status.value}">{result.status.value}</span>'
+            f'{"<span class=done>settled by a human</span>" if resolved else ""}</h3>'
             f'<div class="why">{html.escape(verdict_line(result))}'
             f'<div class="src">routed by {html.escape(result.classified_by_rule or "—")} '
-            f'({result.decided_by.value})</div></div>{table}</div>')
+            f'({result.decided_by.value})</div></div>{table}{actions}</div>')
+
+
+@app.get("/favicon.ico")
+def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/", response_class=HTMLResponse)
 def review_screen() -> str:
     mismatches = [r for r in RESULTS.values() if r.status is Status.MISMATCH]
     reviews = _open_reviews()
+    settled = [r for r in RESULTS.values() if r.email_id in RESOLUTIONS]
     comparisons = [r for r in RESULTS.values() if r.category is Category.BL_COMPARISON]
     body = []
 
@@ -221,6 +284,7 @@ def review_screen() -> str:
             f'<div class="card"><b>{len(comparisons)}</b><span>doc checks</span></div>'
             f'<div class="card"><b>{len(mismatches)}</b><span>discrepancies</span></div>'
             f'<div class="card"><b>{len(reviews)}</b><span>need a human</span></div>'
+            f'<div class="card"><b>{len(settled)}</b><span>settled</span></div>'
             '</div>')
         body.append("<h2>Needs a human</h2>")
         body.append("".join(_case_html(r) for r in reviews[:25])
@@ -230,7 +294,7 @@ def review_screen() -> str:
                     or '<p class="empty">No mismatch detected.</p>')
 
     return (f"<!doctype html><meta charset=utf-8><title>SDOC review</title>"
-            f"<style>{_STYLE}</style>"
+            f"<style>{_STYLE}</style><script>{_SCRIPT}</script>"
             f"<header><h1>Shipping document verification</h1>"
             f"<p>SI vs draft BL — discrepancies and the cases a person has to settle</p>"
             f"</header><main>{''.join(body)}</main>")

@@ -61,9 +61,13 @@ def build_rows(si: ExtractedDocument, bl: ExtractedDocument) -> list[FieldCompar
         matched = values_match(name, si_value, bl_value)
         note = None
         if not matched:
+            # Show where each value came from only when the two documents labelled the
+            # field differently — that is the "same information looks different" case a
+            # reviewer needs to see. Repeating an identical label on both sides is noise.
             si_label = si_field.raw_label if si_field else name
             bl_label = bl_field.raw_label if bl_field else name
-            note = f"SI '{si_label}' vs BL '{bl_label}'"
+            if si_label and bl_label and si_label != bl_label:
+                note = f"read as SI '{si_label}' vs BL '{bl_label}'"
         rows.append(FieldComparison(field=name, si_value=si_value, bl_value=bl_value,
                                     match=matched, note=note))
     return rows
