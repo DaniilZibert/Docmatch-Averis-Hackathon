@@ -27,7 +27,6 @@ JSON / integration
 
 from __future__ import annotations
 
-import os
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -37,6 +36,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
                                PlainTextResponse)
 
+from .. import config
 from ..models import EmailResult, Status, build_submission
 from ..report import render_report, verdict_line
 from . import ui
@@ -44,13 +44,16 @@ from .store import STORE
 
 from pydantic import BaseModel
 
-DATA_DIR = os.environ.get("DATA_DIR", "data")
+# Where the inbox lives. Set DATA_DIR to aim the service at a different drop of
+# emails; nothing else has to change.
+DATA_DIR = config.data_dir()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Process the inbox on boot, in the background, so the first page load is useful
     # and the service is still up while it works.
+    import os
     if os.environ.get("SDOC_NO_AUTORUN") != "1":
         STORE.start_run(DATA_DIR)
     yield

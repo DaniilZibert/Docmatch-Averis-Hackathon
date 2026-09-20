@@ -241,16 +241,35 @@ on the scoreboard.
 
 ---
 
-## 6. Who owns what
+## 6. Who owns what — READ THIS IF YOU ARE PICKING THIS UP
 
-Work in your own files. The only shared files are `src/models.py`, `src/pipeline.py`
-and this one — touch those deliberately, not incidentally.
+The original split was Person A on classification and extraction, Person B on
+comparison, service and infrastructure. **Both halves are now written.** Nothing is
+waiting to be implemented, so do not start by building something that already exists —
+run it first (`pytest -q`, then `uvicorn src.api.main:app --reload`) and see what is
+there.
 
-**Person A — "the brains"**: `src/classifier.py`, `src/extractor/*`
-**Person B — "the body"**: `src/normalize.py`, `src/comparator.py`, `src/submission.py`,
-`src/report.py`, `src/db/*`, `src/api/*`, `deploy/*`, `scripts/evaluate.py`
+The files are still organised the same way and the split still works for dividing new
+work:
 
-Both sides are implemented. Either of you can test without the other:
+**"the brains"**: `src/classifier.py`, `src/extractor/*`
+**"the body"**: `src/normalize.py`, `src/comparator.py`, `src/submission.py`,
+`src/report.py`, `src/db/*`, `src/api/*`, `deploy/*`, `scripts/*`
+**shared — touch deliberately**: `src/models.py`, `src/pipeline.py`, this file
+
+### Before you change anything
+
+1. `pytest -q` — 176 tests. If they are green, the thing works; if your change reddens
+   one, the test is usually right and the change is usually wrong.
+2. `./scripts/check_robustness.sh <path to data_v2>` after any change to the rules. The
+   sample inbox is one draw from a generator; this scores you on fresh ones. It is what
+   caught the collision bug that a code review had missed.
+3. Read §5 before "fixing" anything in the extractors. Several things there look like
+   bugs and are not: the address lines that are deliberately ignored, the PDF container
+   table that is deliberately skipped, the blank tokens that are deliberately not
+   values.
+
+### Testing one half without the other
 
 ```python
 from src.models import ExtractedDocument, DocType
@@ -259,6 +278,24 @@ si = ExtractedDocument.fake("email_1", DocType.SI, container_count=3)
 bl = ExtractedDocument.fake("email_1", DocType.BL, container_count=4)
 compare(si, bl)   # MISMATCH, defect_fields == ["container_count"]
 ```
+
+### Running against a different inbox
+
+One variable, everywhere — no code change:
+
+```bash
+python -m src.pipeline --data-dir /path/to/new-inbox
+DATA_DIR=/path/to/new-inbox uvicorn src.api.main:app        # the service and screens
+```
+
+The folder needs `inbox/email_*.json` and `attachments/` in the shape `data/` has.
+
+### The API key is not in the repo
+
+`.env` is gitignored and stays out of git deliberately. Ask the other person for the
+key and put it in your own `.env` (copy `.env.example`). Without it everything still
+runs — rules only, with `"llm": "rules-only"` on `/health` — so a missing key is never
+the reason something is broken.
 
 ---
 

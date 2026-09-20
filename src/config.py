@@ -63,8 +63,20 @@ def max_llm_calls() -> int:
         return 40
 
 
-def data_source() -> str:
-    return os.environ.get("DATA_SOURCE", "data")
+def data_dir() -> str:
+    """Where the inbox lives: a folder holding inbox/ and attachments/.
+
+    Point this at a different dataset to run against it — that is all it takes, and it
+    is how the service is aimed at a new drop of emails without a code change:
+
+        DATA_DIR=/srv/inbox-2026-02 uvicorn src.api.main:app
+        python -m src.pipeline --data-dir /srv/inbox-2026-02
+
+    DATA_SOURCE is accepted as an alias because .env.example used to spell it that way.
+    """
+    return (os.environ.get("DATA_DIR")
+            or os.environ.get("DATA_SOURCE")
+            or "data")
 
 
-__all__ = ["PROJECT_ROOT", "api_key", "model", "max_llm_calls", "data_source"]
+__all__ = ["PROJECT_ROOT", "api_key", "model", "max_llm_calls", "data_dir"]
