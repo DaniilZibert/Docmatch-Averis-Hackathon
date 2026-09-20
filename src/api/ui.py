@@ -189,12 +189,36 @@ async function toggleLlm(btn) {
 }
 async function runInbox(btn) {
   btn.disabled = true; btn.textContent = 'Processing…';
-  await fetch('/run', {method: 'POST'});
-  setTimeout(() => location.reload(), 1200);
+  try { await fetch('/run', {method: 'POST'}); } catch (e) {}
+  location.reload();                       // comes back with data-run="running"
 }
-// while a run is in flight, refresh until it lands
-if (document.body && document.body.dataset.run === 'running') {
-  setTimeout(() => location.reload(), 1500);
+
+// While a run is in flight the page says "processing the inbox…" — so something has to
+// notice when it stops. Poll /health rather than reloading on a timer: a blind reload
+// loop fights the reader for the scroll position, and one that fires before the run
+// lands just starts another one.
+//
+// This MUST wait for DOMContentLoaded. The script tag is in the head, so at parse time
+// document.body is still null; the earlier version tested `document.body.dataset` right
+// here, got null, silently armed nothing, and left the banner spinning until somebody
+// reloaded by hand.
+function watchRun() {
+  if (!document.body || document.body.dataset.run !== 'running') return;
+  let tries = 0;
+  const poll = async () => {
+    try {
+      const h = await (await fetch('/health', {cache: 'no-store'})).json();
+      if (h.run && h.run.status !== 'running') { location.reload(); return; }
+    } catch (e) { /* a restarting service refuses connections; keep waiting */ }
+    if (++tries < 120) setTimeout(poll, 1500);   // give up after ~3 minutes
+    else location.reload();                      // and let the page show the real state
+  };
+  setTimeout(poll, 1000);
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', watchRun);
+} else {
+  watchRun();
 }
 """
 

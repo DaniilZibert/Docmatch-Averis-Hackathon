@@ -1,10 +1,12 @@
 # Caddy terminates TLS and proxies to the app. It obtains and renews a Let's Encrypt
 # certificate on its own — no certbot, no cron, no renewal to forget during the event.
 #
-# SDOC_DOMAIN comes from .env. Set it to the hostname whose A record points at this
-# box; use :80 while you are still testing by IP.
+# SDOC_DOMAIN comes from the repository-root .env (see docker-compose.prod.yml). Set it
+# to the hostname whose A record points at this box. With it unset the site falls back
+# to `:80`, which answers on the IP over plain HTTP and issues no certificate — useful
+# before DNS exists, and the thing to check first if the padlock is missing.
 
-{$SDOC_DOMAIN} {
+{$SDOC_DOMAIN::80} {
 	encode zstd gzip
 	reverse_proxy app:8000
 

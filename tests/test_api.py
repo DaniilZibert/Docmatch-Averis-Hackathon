@@ -139,3 +139,33 @@ def test_the_llm_switch_is_reachable_from_the_service(client, tmp_path, monkeypa
 def test_every_screen_shows_the_switch(client):
     for path in ["/", "/inbox", "/review", "/report", "/case/email_004"]:
         assert "toggleLlm" in client.get(path).text, path
+
+
+def test_the_run_watcher_waits_for_the_dom(client):
+    """Regression: 'processing the inbox…' used to hang forever.
+
+    The <script> tag sits in the head, before <body> is parsed, so a top-level
+    `document.body.dataset.run` check read null, armed nothing, and left the banner
+    spinning until somebody reloaded by hand. The watcher must be deferred.
+    """
+    page = client.get("/").text
+    script_at = page.index("<script>")
+    body_at = page.index("<body")
+    assert script_at < body_at, "the script still runs before <body> is parsed"
+
+    script = page[script_at:page.index("</script>", script_at)]
+    assert "DOMContentLoaded" in script, "the watcher must wait for the DOM"
+    # nothing may touch document.body outside a function or the listener
+    for line in script.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("//") or not stripped:
+            continue
+        if "document.body" in stripped:
+            assert stripped.startswith(("if (!document.body", "results", "const", "let")) \
+                or "function" in script[:script.index(stripped)].rsplit("\n", 40)[0], \
+                f"top-level document.body access: {stripped}"
+
+
+def test_the_page_advertises_the_run_state_for_the_watcher(client):
+    """The watcher keys off data-run; if the attribute goes, it silently never fires."""
+    assert 'data-run="ready"' in client.get("/").text
