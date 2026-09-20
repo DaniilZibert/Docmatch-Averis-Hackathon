@@ -45,16 +45,34 @@ EC2 → Launch instance:
 Allocate an **Elastic IP** and associate it. Without one the address changes on every
 stop/start and your DNS record goes stale mid-event.
 
-## 2. The domain
+## 2. The domain — a free `.tech` from the Student Pack
 
-At your registrar, one record:
+The GitHub Student Developer Pack includes a free `.tech` domain for a year. Claim it
+at <https://get.tech/github-student-developer-pack> (sign in with GitHub so it can see
+your student status) and pick something short — `averis-sdoc.tech`, `sdoc-check.tech`.
+You will be reading it out loud to judges.
 
+Then, in the **.tech dashboard → Manage → DNS records**, add one record:
+
+| type | host | value | TTL |
+|---|---|---|---|
+| A | `@` | *the Elastic IP* | 300 |
+
+Add a second one for `www` if you want it, same value. That is all — no nameserver
+change, no CNAME, nothing else.
+
+**Do this before you deploy.** DNS takes a few minutes and Caddy cannot get a
+certificate until the name resolves to the box. Check from your laptop:
+
+```bash
+dig +short averis-sdoc.tech          # must print your Elastic IP
 ```
-A    sdoc.<your-domain>    <the Elastic IP>    TTL 300
-```
 
-Do this first — DNS takes a few minutes to propagate and Caddy cannot issue a
-certificate until it resolves. Check with `dig +short sdoc.<your-domain>`.
+If it prints nothing after ten minutes, the record has not propagated; wait, do not
+start changing things.
+
+> Registering a domain at `.tech` puts your name and address in WHOIS. Turn on the free
+> privacy protection in the dashboard.
 
 ## 3. Docker
 
@@ -70,6 +88,13 @@ exit          # log back in so the group takes effect
 
 ```bash
 ssh -i <key>.pem ubuntu@<elastic-ip>
+
+# a t3.micro has 1 GB of RAM. Give it swap before anything else, or the first
+# container start will be an unexplained kill.
+sudo fallocate -l 2G /swapfile && sudo chmod 600 /swapfile
+sudo mkswap /swapfile && sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+
 git clone https://gitlab.com/daniilz2018/averis-hackaton.git
 cd averis-hackaton
 # private repo? GitLab → Settings → Repository → Deploy tokens (read_repository), then
@@ -78,17 +103,18 @@ cd averis-hackaton
 
 cp .env.example .env
 nano .env
-#   SDOC_DOMAIN=sdoc.<your-domain>
-#   ANTHROPIC_API_KEY=...        optional — see the note below
-#   LLM_MAX_CALLS=40
+#   SDOC_DOMAIN=averis-sdoc.tech
+#   SDOC_LLM=off                 leave it off; you turn Claude on from the UI
+#   ANTHROPIC_API_KEY=...        optional — see "the Claude switch" below
 
 docker compose -f deploy/docker-compose.prod.yml up -d --build
 ```
 
-First build takes a few minutes. Then:
+The first build takes a few minutes (CI builds the image for you after this, so this is
+the only time you wait). Then:
 
 ```bash
-curl -s https://sdoc.<your-domain>/health
+curl -s https://averis-sdoc.tech/health
 docker compose -f deploy/docker-compose.prod.yml logs -f --tail=50
 ```
 
@@ -102,21 +128,77 @@ watch the report change. If any of that needs a terminal, it is not finished.
 
 ---
 
-## About the API key in production
+## The Claude switch
 
-**The service does not need one.** With no key it runs rules-only, scores the same on
-the sample data, and says `"llm": "rules-only"` on `/health`. Everything it cannot read
-deterministically is escalated to a person with the evidence — which is correct
+**The service does not need a key.** With none it runs rules-only, scores exactly the
+same on the sample data, and says `"llm": "rules-only"` on `/health`. Everything it
+cannot read deterministically is escalated to a person with the evidence — correct
 behaviour, not a degraded mode.
 
-Put the key on the server only if you want the scanned-document path live in the demo.
-If you do:
+Even with a key present, **Claude is off until somebody turns it on.** There is a switch
+in the header of every screen:
 
-- it goes in `.env` on the box and nowhere else — never in the repo, never in the image;
-- keep `LLM_MAX_CALLS` set. A public URL with an unmetered key on it is a way to lose a
-  budget to a crawler;
-- `docker compose ... exec app env | grep -c ANTHROPIC_API_KEY` to confirm it arrived,
-  which prints a count rather than the key.
+```
+●  520 emails in 1.3s · no LLM calls    [ ○──  Claude off ]    Re-run
+```
+
+Click it and it goes green, shows the calls made and the running cost, and the scanned
+documents start going to vision. Click it again and it stops. No redeploy, no ssh, and
+the setting is written to the `sdoc_state` volume so it survives a restart — including a
+CI deploy.
+
+That is the answer to "don't burn the budget for nothing": leave it off, turn it on for
+the two minutes of the demo where you show a scanned BL being read, turn it off after.
+
+Belt and braces around it:
+
+- `SDOC_LLM=off` in `.env` is the default the container starts with. The switch, once
+  used, overrides it and persists.
+- `LLM_MAX_CALLS` (default 40) caps calls per run whatever the switch says. A public URL
+  with an unmetered key behind it is a way to donate a budget to a crawler.
+- CI never spends: `.gitlab-ci.yml` pins `SDOC_LLM=off` and `LLM_MAX_CALLS=0`, and the
+  test suite disables it independently in `tests/conftest.py`.
+- The key goes in `.env` on the box, or in a Protected CI variable — never in the repo
+  and never baked into the image. Confirm it arrived without printing it:
+  `docker compose -f deploy/docker-compose.prod.yml exec app env | grep -c ANTHROPIC_API_KEY`
+
+## CI/CD
+
+`.gitlab-ci.yml` runs on every push: the 195 tests, then a real pass over all 520 emails
+with the submission validated for shape. On `main` it also builds the image, smoke-tests
+that the container actually comes up, pushes it to the GitLab registry, and deploys.
+
+The image is built in CI rather than on the server on purpose — a t3.micro building
+pymupdf is a coin flip, pulling a finished image is not.
+
+**Settings → CI/CD → Variables**, before the first automated deploy:
+
+| variable | type | value |
+|---|---|---|
+| `SSH_PRIVATE_KEY` | File, Protected | a key made **for CI only** |
+| `SSH_KNOWN_HOSTS` | File, Protected | `ssh-keyscan <elastic-ip>` run from your laptop |
+| `DEPLOY_HOST` | Variable | the Elastic IP (or the domain) |
+| `DEPLOY_USER` | Variable | `ubuntu` |
+| `DEPLOY_PATH` | Variable | `/home/ubuntu/averis-hackaton` |
+
+Make the CI key, and authorise only it:
+
+```bash
+ssh-keygen -t ed25519 -f deploy_key -C gitlab-ci -N ""
+cat deploy_key.pub | ssh -i <your-key>.pem ubuntu@<ip> 'cat >> ~/.ssh/authorized_keys'
+ssh-keyscan <ip> > known_hosts        # paste this file into SSH_KNOWN_HOSTS
+# paste deploy_key (the private one) into SSH_PRIVATE_KEY, then delete it locally
+```
+
+Never reuse your laptop's key for this. Pinning `SSH_KNOWN_HOSTS` is what stops the
+deploy job from happily trusting an impostor host.
+
+The server also needs to be able to pull from the registry:
+
+```bash
+# on the server, once
+docker login registry.gitlab.com -u <deploy-token-user> -p <deploy-token>
+```
 
 ## Operations
 
@@ -143,4 +225,7 @@ Let's Encrypt will rate-limit you for re-issuing.
 | connects on http, no certificate | DNS has not propagated yet, or `SDOC_DOMAIN` still says `:80` |
 | `/health` shows `"processed": 0` | the run failed — `logs app` will have the traceback |
 | pages are slow the first few seconds after a deploy | the startup run is still going; the page refreshes itself |
-| `"llm": "rules-only"` and you expected otherwise | the key is not in `.env` on the server, or `LLM_MAX_CALLS=0` |
+| `"llm": "rules-only"` and you expected otherwise | the switch is off (click it in the header), or there is no key in `.env`, or `LLM_MAX_CALLS=0` |
+| the Claude switch forgets itself on restart | the `sdoc_state` volume is not writable by the container user — `logs app` will say so outright |
+| the first `up` gets killed with no message | no swap on a 1 GB box; see step 4 |
+| CI deploy fails at `ssh` | `SSH_KNOWN_HOSTS` is stale — the Elastic IP changed, or you never associated one |

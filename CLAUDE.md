@@ -62,7 +62,7 @@ Output goes to `submission.json`, keyed by `email_id`, in the shape of
 ```bash
 pip install -r requirements.txt
 cp .env.example .env            # optional; see below
-pytest -q                       # 176 tests, no network, no spend
+pytest -q                       # 195 tests, no network, no spend
 python -m src.pipeline          # 520 emails -> submission.json, ~1s, no LLM calls
 ```
 
@@ -84,20 +84,29 @@ with the exact field set, 20/20 escalations with no false alarms. Reproduce it w
 `./scripts/check_robustness.sh <path to data_v2>`. That exercise is what found the
 case-collision bug fixed in field_aliases — run it after any change to the rules.
 
-### The API key
+### The Claude switch and the API key
 
-`.env` holds the team key and is gitignored — it stays on our machines, and judges
-running this repo get the deterministic path. `src/config.py` loads it; nothing else
-reads `os.environ`.
+**Claude is OFF by default and nothing spends until somebody turns it on.** The rules
+score 1.0000 without a single call, so the expensive path is the one you have to ask
+for. Four layers, and they are deliberately redundant:
 
-  * `LLM_MAX_CALLS` (default 40) caps Claude calls per process. The rules resolve the
-    sample inbox alone, so a run that reaches the cap is a run against unfamiliar data;
-    the cap is what stops an accidental full-inbox LLM pass from spending the budget.
-    `python -m src.pipeline` prints the calls it made.
-  * `pytest` never spends anything — `tests/conftest.py` switches the LLM off for the
-    whole session. Keep it that way; tests must stay free, offline and deterministic.
-  * `python scripts/llm_smoke.py` proves the three Claude paths work, on invented input
-    the rules cannot handle. ~4 calls, a few cents. Run it before a demo.
+  * **the switch** in the header of every screen — one click, no redeploy, no ssh. It
+    shows the calls made and the running cost while it is on, and is remembered across
+    restarts (the `sdoc_state` volume in production). `POST /settings/llm` is the same
+    thing for scripts.
+  * **`SDOC_LLM=on|off`** sets the default a process starts with. The switch overrides it.
+  * **`LLM_MAX_CALLS`** (default 40) caps calls per run whatever the switch says. The
+    rules resolve the sample inbox alone, so a run that reaches the cap is a run against
+    unfamiliar data. `python -m src.pipeline` prints the calls it made.
+  * **`tests/conftest.py`** disables the LLM for the whole pytest session, and CI pins
+    it off again. Tests must stay free, offline and deterministic — keep it that way.
+
+`.env` holds the team key and is gitignored: it stays on our machines and on the server,
+never in git. `src/config.py` loads it; nothing else reads `os.environ`.
+
+`python scripts/llm_smoke.py` proves the three Claude paths work, on invented input the
+rules cannot handle. ~4 calls, a few cents. Run it before a demo — and remember to turn
+the switch on first, or it will correctly refuse to call anything.
 
 ```
 CLAUDE.md                  this file
@@ -131,9 +140,10 @@ scripts/
   evaluate.py              ✅ score, save a run, diff two runs, error analysis
   llm_smoke.py             ✅ prove the Claude paths work (costs a few cents)
   check_robustness.sh      ✅ score against freshly generated, never-seen inboxes
-docs/deploy-aws.md         ✅ runbook: EC2 + domain + HTTPS
+docs/deploy-aws.md         ✅ runbook: EC2 + .tech domain + HTTPS + CI/CD variables
 deploy/                    ✅ Dockerfile, local compose, prod compose + Caddy
-tests/                     ✅ 176 tests, contract + every stage + API + end-to-end
+.gitlab-ci.yml             ✅ test -> build image -> deploy to the server
+tests/                     ✅ 195 tests, contract + every stage + API + the switch
 ```
 
 Remaining work is judge-facing, not pipeline: see §8.
@@ -340,7 +350,7 @@ The pipeline is done. These are rubric lines, not accuracy:
    table — rules-only vs rules+LLM vs LLM-only across accuracy, cost and latency. That
    table is the argument for the design; the rules-only column is already measured.
 2. **Technology Integration (15).** All three Claude paths are verified working with a
-   real key: classification of emails outside our templates, extraction from a layout
+   real key (turn the switch on first): classification of emails outside our templates, extraction from a layout
    with no aliases at all (7/7 fields, and it took the gross weight rather than the net
    one), and vision on the image-only scans. What is missing is the cost and latency
    numbers next to them.

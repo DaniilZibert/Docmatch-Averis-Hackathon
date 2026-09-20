@@ -42,7 +42,7 @@ taken down by a rate limit.
 pip install -r requirements.txt
 cp .env.example .env          # optional: add ANTHROPIC_API_KEY for the fallbacks
 
-pytest -q                     # 176 tests — free, offline, no API calls
+pytest -q                     # 195 tests — free, offline, no API calls
 python -m src.pipeline        # 520 emails -> submission.json + a run summary
 python -m src.pipeline --report out/report.md      # + the discrepancy report
 ```
@@ -75,6 +75,19 @@ Rows that are blank on one side are deliberately *not* pre-ticked: a missing val
 why we stopped, not a discrepancy, and the screen should not walk a reviewer into
 confusing the two.
 
+### The Claude switch
+
+Claude costs money and the rules do not need it, so it is **off** until somebody turns
+it on — from the header of any screen, one click, no redeploy:
+
+```
+●  520 emails in 1.3s · no LLM calls    [ ○──  Claude off ]    Re-run
+```
+
+On, it goes green and shows the calls made and the running cost. The setting survives a
+restart. `LLM_MAX_CALLS` caps the calls per run whatever the switch says, CI pins it off,
+and the test suite disables it independently — so nothing spends by accident.
+
 ### On a server
 
 ```bash
@@ -82,8 +95,10 @@ cp .env.example .env          # set SDOC_DOMAIN
 docker compose -f deploy/docker-compose.prod.yml up -d --build
 ```
 
-One container behind Caddy, which gets a Let's Encrypt certificate on its own. The full
-runbook — EC2 instance, security group, DNS, what the GitHub Student Pack covers — is in
+The app behind Caddy, which gets a Let's Encrypt certificate on its own. Pushing to
+`main` runs the tests, builds the image, smoke-tests the container and deploys it
+(`.gitlab-ci.yml`). The full runbook — EC2, security group, a free `.tech` domain from
+the GitHub Student Pack, and the CI variables — is in
 **[docs/deploy-aws.md](docs/deploy-aws.md)**.
 
 Measuring a change:
