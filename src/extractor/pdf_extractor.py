@@ -94,8 +94,13 @@ def _page_images(path: Path, max_pages: int = 2) -> list[bytes]:
     """Render pages to PNG for the vision fallback. Empty list if pymupdf is absent."""
     global _WARNED_NO_PYMUPDF
     try:
-        import fitz  # pymupdf
+        import pymupdf
     except ImportError:
+        try:
+            import fitz as pymupdf          # older releases only ship the fitz alias
+        except ImportError:
+            pymupdf = None
+    if pymupdf is None:
         if not _WARNED_NO_PYMUPDF:
             _WARNED_NO_PYMUPDF = True
             log.warning("pymupdf is not installed: scanned PDFs cannot be rendered for "
@@ -103,7 +108,7 @@ def _page_images(path: Path, max_pages: int = 2) -> list[bytes]:
                         "pip install -r requirements.txt")
         return []
     try:
-        with fitz.open(path) as document:
+        with pymupdf.open(path) as document:
             return [page.get_pixmap(dpi=200).tobytes("png")
                     for page in list(document)[:max_pages]]
     except Exception as exc:
@@ -126,6 +131,9 @@ def extract_pdf(path: Path, email_id: str, doc_type: DocType,
                                    f"PDF will not open: {type(exc).__name__}")
 
     if len(text.strip()) >= TEXT_LAYER_MIN_CHARS:
+        # llm_fallback stays on: a PDF whose text layer reads fine but whose LAYOUT we
+        # have no aliases for is cheaper and more accurate to fix with a text call than
+        # with vision. Vision below is for pages that have no text at all.
         document = build_document(parse_pdf_text(text), email_id=email_id,
                                   doc_type=doc_type, source_path=source_path, text=text)
         if not document.unreadable:
