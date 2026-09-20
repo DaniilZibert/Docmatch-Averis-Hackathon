@@ -65,7 +65,10 @@ Four screens at <https://docmatch.tech>, no command to start anything:
 | Inbox | all 520 emails, filterable and searchable |
 | Case | the email beside the two documents, field by field, with the decision |
 | Report | the discrepancy report, ready to send on |
-| Try your own | a judge uploads an SI and a draft BL, or a whole inbox, and watches it run |
+| Upload new data | a judge brings their own SI and draft BL, or a whole inbox, and watches it run |
+
+Every row in every list opens its case on a click anywhere in the row, not just on the
+id — the small link alone did not read as "you can open this".
 
 A case shows which label each value was read from — *"read as SI 'Consignee
 (Non-Negotiable)' vs BL 'To the Order of'"* — which is the brief's "the same
@@ -77,11 +80,48 @@ Rows blank on one side are deliberately **not** pre-ticked as defects: a missing
 is why we stopped, not a discrepancy, and the screen must not walk a reviewer into
 confusing the two.
 
+### Judges can bring their own data
+
+**Upload new data** (`/upload`) takes an SI and a draft BL in any of the four formats
+and runs them through the same code path the bundled inbox takes — no special case, no
+second implementation to keep in step. It also takes a `.zip` shaped like `data/` to
+swap the whole working dataset, with one button to put the bundled one back. Nothing is
+written into `data/`.
+
+This is where the hybrid stops being a claim. An uploaded document is by definition a
+layout nothing has seen, so the rules parse the labels they recognise and the AI reads
+the rest. Tested on a booking note written entirely in unfamiliar wording — "Party
+sending the goods", "Taking on board at", "Boxes in this lot":
+
+* all seven fields came back from both documents
+* `seven x 40'HC` was read as 7
+* the gross weight was taken, not the net figure sitting on the next line
+* the planted discrepancy was found — PIRAEUS against THESSALONIKI
+* two real API calls, $0.0104
+
+Nineteen of the tests cover this, weighted towards the hostile cases: an upload form on
+a public URL is the one place a stranger hands us bytes. A zip member that escapes the
+extraction root is refused, as are non-archives, archives with no `inbox/`, unreadable
+file types and oversized anything.
+
 ### The AI switch
 
 Off by default, one click in the header, shows what it has spent, survives restarts.
-Four independent layers stop an accidental spend. Details in
-[OPERATIONS.md](OPERATIONS.md#3-the-ai-switch).
+
+**The organizers ruled that we may not gate the paid actions** — the prototype has to be
+publicly accessible in full — so the budget is defended without locking anybody out:
+
+* every AI answer is cached on disk against the exact bytes of the request. The first
+  pass over anything new is a genuine call; the same documents again are free. Somebody
+  pressing `/run` in a loop therefore costs nothing after the first press.
+* a cumulative $2.50 ceiling, written to disk on every call, which switches the AI off
+  by itself and survives restarts.
+* a 20-second cooldown on `/run`, which throttles rather than denies.
+
+The cache is consulted **only while the AI is on**. Serving cached answers with the
+switch off would put vision results into the rules-only column of the ablation table
+while reporting zero calls — see A1. Details in
+[OPERATIONS.md](OPERATIONS.md#3-the-ai-switch-and-what-stops-it-emptying-the-budget).
 
 ### Infrastructure
 
@@ -91,7 +131,7 @@ the pipeline and no credentials held by CI. [OPERATIONS.md](OPERATIONS.md).
 
 ### Validation
 
-226 tests, free and offline. `scripts/evaluate.py` saves each run and diffs two of them
+228 tests, free and offline. `scripts/evaluate.py` saves each run and diffs two of them
 email by email with an error breakdown per scoring axis. `scripts/check_robustness.sh`
 scores against freshly generated inboxes. `scripts/llm_smoke.py` proves the three
 Claude paths work on input the rules cannot handle.
@@ -157,7 +197,7 @@ Preliminary, 100 points. Our standing, honestly assessed:
 | Working Core Prototype | **25** | strong — the core flow works end to end, deployed |
 | System Design & Architecture | 15 | strong — needs an architecture diagram in the deck |
 | Technology Integration | 15 | **the AI risk lands here** |
-| Technical Feasibility & Validation | 15 | strong — 226 tests, six unseen datasets, error analysis |
+| Technical Feasibility & Validation | 15 | strong — 228 tests, six unseen datasets, error analysis |
 | Problem Statement Understanding | 10 | strong — needs saying out loud in the deck |
 | Innovation & Solution Approach | 10 | thin — nothing distinctive is *explained* yet |
 | Practical Value & Potential | 10 | needs the real-inbox path and cost numbers |
@@ -252,7 +292,7 @@ inbox: IMAP or Microsoft Graph, `.msg` parsing, what changes and what does not. 
 *Self-contained — new files only.*
 
 **B4 · Fresh-eyes review — P1**
-Include `/try`: upload two documents of your own invention and see whether the result
+Include `/upload`: upload two documents of your own invention and see whether the result
 is understandable to someone who did not build it.
 Read `CLAUDE.md` first: several things in the extractors look like bugs and are
 deliberate, and that section says which. Then try to break <https://docmatch.tech>.

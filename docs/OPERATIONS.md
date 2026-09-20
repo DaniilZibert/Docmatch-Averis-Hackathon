@@ -47,7 +47,7 @@ three things that quietly bill on AWS (load balancer, NAT gateway, RDS) are all 
 
 ```
 git push origin main
-   └─ test    226 tests, then a real pass over 520 emails, submission validated
+   └─ test    228 tests, then a real pass over 520 emails, submission validated
    └─ build   build the image, prove the container starts, push to the GitLab registry
    └─ deploy  wait until /health reports this commit
                   ↑
@@ -158,7 +158,7 @@ distinction is why this arrangement satisfies the rule.
 
 ### Uploads are the case where the AI genuinely earns its place
 
-`/try` lets anyone hand the system a document it has never seen. That is a real cost
+`/upload` lets anyone hand the system a document it has never seen. That is a real cost
 vector and it is supposed to be: the rules parse the labels they recognise, Claude reads
 the rest, and the ceiling is what bounds it. A booking note written entirely in
 unfamiliar labels ("Party sending the goods", "Taking on board at", "Boxes in this lot")

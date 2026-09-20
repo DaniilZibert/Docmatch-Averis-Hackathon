@@ -343,7 +343,7 @@ def page(title: str, body: str, *, active: str = "", run=None, llm=None) -> str:
   <div class=brand>Shipping document verification<small>SI vs draft BL · APRIL operations inbox</small></div>
   <nav>{link('/', 'Overview', 'overview')}{link('/inbox', 'Inbox', 'inbox')}
        {link('/review', 'Needs review', 'review')}{link('/report', 'Report', 'report')}
-       {link('/try', 'Try your own', 'try')}</nav>
+       {link('/upload', 'Upload new data', 'upload')}</nav>
   <div class=runbox><span class="dot {e(status)}"></span><span>{e(note)}</span>
     {llm_switch(llm)}
     <button class=b-light onclick="runInbox(this)">Re-run</button></div>
@@ -585,7 +585,7 @@ def case(store, result: EmailResult, back: str = "/", llm=None) -> str:
 </div>""", active="", run=store.run, llm=llm)
 
 
-def try_page(store, llm=None, error: str | None = None, notice: str | None = None) -> str:
+def upload_page(store, llm=None, error: str | None = None, notice: str | None = None) -> str:
     from .uploads import ALLOWED_SUFFIXES, MAX_FILE_BYTES
 
     banner = ""
@@ -601,15 +601,15 @@ def try_page(store, llm=None, error: str | None = None, notice: str | None = Non
                "The AI fallback is currently <b>off</b>, so anything the rules cannot "
                "parse will be escalated rather than read by Claude.")
 
-    return page("Try your own", f"""
-<h1>Try it on your own documents</h1>
+    return page("Upload new data", f"""
+<h1>Upload new data</h1>
 <p class=lede>Nothing here is written into the bundled dataset, and you can put it back
 with one click.</p>
 {banner}
 <div class=drop>
   <div class=pane>
     <header>Compare one pair</header>
-    <form class=pad method=post action="/try" enctype="multipart/form-data">
+    <form class=pad method=post action="/upload" enctype="multipart/form-data">
       <div class=field>
         <label>Shipping Instruction</label>
         <input type=file name=si accept="{e(formats)}" required>
@@ -636,7 +636,7 @@ with one click.</p>
 
   <div class=pane>
     <header>Load a whole inbox</header>
-    <form class=pad method=post action="/try/inbox" enctype="multipart/form-data">
+    <form class=pad method=post action="/upload/inbox" enctype="multipart/form-data">
       <div class=field>
         <label>A .zip shaped like <code>data/</code></label>
         <input type=file name=archive accept=".zip" required>
@@ -651,7 +651,7 @@ with one click.</p>
       <button type=submit>Load and process</button>
     </form>
     <div class=actions>
-      <form method=post action="/try/reset" style="margin:0">
+      <form method=post action="/upload/reset" style="margin:0">
         <button type=submit>Back to the bundled inbox</button>
       </form>
       <span class=hint>currently {store.counts().get("emails", 0)} emails loaded</span>
@@ -669,7 +669,7 @@ settle is escalated with the evidence rather than guessed.<br><br>
 An answer is cached against the exact bytes of the request, so running the same
 documents again is free — but the <b>first</b> pass over anything new is a real call.
 </p></div></div>
-""", active="try", run=store.run, llm=llm)
+""", active="upload", run=store.run, llm=llm)
 
 
 def report_page(store, markdown: str, llm=None) -> str:
@@ -725,4 +725,4 @@ def _inline(text: str) -> str:
 
 
 __all__ = ["page", "llm_switch", "overview", "inbox", "review_list", "case",
-           "try_page", "report_page", "CSS", "JS"]
+           "upload_page", "report_page", "CSS", "JS"]

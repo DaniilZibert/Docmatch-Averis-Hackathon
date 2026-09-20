@@ -57,7 +57,7 @@ out of a document with no recognisable labels.
 pip install -r requirements.txt
 cp .env.example .env          # optional: ANTHROPIC_API_KEY for the fallbacks
 
-pytest -q                     # 226 tests — free, offline, no API calls
+pytest -q                     # 228 tests — free, offline, no API calls
 python -m src.pipeline        # 520 emails -> submission.json + a run summary
 uvicorn src.api.main:app --reload    # then open http://localhost:8000
 ```
@@ -73,7 +73,7 @@ nothing to load.
 | **Inbox** | all 520 emails, filterable by category and outcome, searchable |
 | **Case** | one email beside the two documents, field by field, with the decision |
 | **Report** | the discrepancy report, ready to send on |
-| **Try your own** | upload an SI and a draft BL, or a whole inbox, and see it run |
+| **Upload new data** | bring your own SI and draft BL, or a whole inbox, and see it run |
 
 A case shows the email on the left and the seven compared fields on the right, with the
 differing rows highlighted and the label each value was read under — *"read as SI
@@ -88,7 +88,7 @@ the two.
 
 ### Bring your own documents
 
-`/try` takes an SI and a draft BL in any of the four formats and runs them through the
+`/upload` takes an SI and a draft BL in any of the four formats and runs them through the
 same code path the bundled inbox takes. It also takes a `.zip` shaped like `data/` to
 swap the whole working dataset, with one button to put the bundled one back.
 

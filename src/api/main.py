@@ -35,7 +35,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
-                               PlainTextResponse)
+                               PlainTextResponse, RedirectResponse)
 
 from .. import config
 from ..models import EmailResult, Status, build_submission
@@ -172,20 +172,20 @@ def attachment(path: str) -> Response:
 
 
 # ---------------------------------------------------------------------------
-# Trying it on your own documents
+# Uploading new data
 # ---------------------------------------------------------------------------
 # An uploaded document is a layout we have never seen, which is exactly when the hybrid
 # has to earn its keep: the rules parse what they recognise, Claude reads the rest.
 # Nothing is written into data/ — uploads live in a scratch directory and the bundled
 # inbox is always one click away.
 
-@app.get("/try", response_class=HTMLResponse)
-def screen_try() -> str:
-    return ui.try_page(STORE, _llm())
+@app.get("/upload", response_class=HTMLResponse)
+def screen_upload() -> str:
+    return ui.upload_page(STORE, _llm())
 
 
-@app.post("/try", response_class=HTMLResponse)
-async def try_pair(si: UploadFile = File(...), bl: UploadFile = File(...),
+@app.post("/upload", response_class=HTMLResponse)
+async def upload_pair(si: UploadFile = File(...), bl: UploadFile = File(...),
                    subject: str = Form(""), body: str = Form("")) -> HTMLResponse:
     """Compare one uploaded SI against one uploaded draft BL."""
     from .. import pipeline
@@ -194,40 +194,47 @@ async def try_pair(si: UploadFile = File(...), bl: UploadFile = File(...),
                                             bl.filename or "bl.txt", await bl.read(),
                                             subject, body)
     except uploads.UploadError as exc:
-        return HTMLResponse(ui.try_page(STORE, _llm(), error=str(exc)), status_code=400)
+        return HTMLResponse(ui.upload_page(STORE, _llm(), error=str(exc)), status_code=400)
 
     result = pipeline.process_email(email, data_dir)
     STORE.results[result.email_id] = result          # so /case/{id} can render it
     STORE.emails[result.email_id] = email
     uploads.cleanup()
-    return HTMLResponse(ui.case(STORE, result, back="/try", llm=_llm()))
+    return HTMLResponse(ui.case(STORE, result, back="/upload", llm=_llm()))
 
 
-@app.post("/try/inbox", response_class=HTMLResponse)
-async def try_inbox(archive: UploadFile = File(...)) -> HTMLResponse:
+@app.post("/upload/inbox", response_class=HTMLResponse)
+async def upload_inbox(archive: UploadFile = File(...)) -> HTMLResponse:
     """Replace the working dataset with an uploaded one shaped like data/."""
     global DATA_DIR
     try:
         new_dir = uploads.save_inbox_zip(await archive.read())
     except uploads.UploadError as exc:
-        return HTMLResponse(ui.try_page(STORE, _llm(), error=str(exc)), status_code=400)
+        return HTMLResponse(ui.upload_page(STORE, _llm(), error=str(exc)), status_code=400)
 
     DATA_DIR = str(new_dir)
     STORE.start_run(DATA_DIR)
-    return HTMLResponse(ui.try_page(STORE, _llm(),
+    return HTMLResponse(ui.upload_page(STORE, _llm(),
                                     notice=f"Loaded {len(list((new_dir / 'inbox').glob('*.json')))} "
                                            f"emails — processing them now."),
                         status_code=200)
 
 
-@app.post("/try/reset", response_class=HTMLResponse)
-def try_reset() -> HTMLResponse:
+@app.post("/upload/reset", response_class=HTMLResponse)
+def upload_reset() -> HTMLResponse:
     """Go back to the dataset that ships with the repository."""
     global DATA_DIR
     DATA_DIR = config.data_dir()
     STORE.start_run(DATA_DIR)
-    return HTMLResponse(ui.try_page(STORE, _llm(),
+    return HTMLResponse(ui.upload_page(STORE, _llm(),
                                     notice="Back to the bundled inbox — reprocessing."))
+
+
+# /try was the first name for this screen. The site is public and the path may have
+# been shared, so it redirects rather than 404s.
+@app.get("/try", include_in_schema=False)
+def screen_try_redirect() -> RedirectResponse:
+    return RedirectResponse("/upload", status_code=308)
 
 
 @app.get("/favicon.ico")

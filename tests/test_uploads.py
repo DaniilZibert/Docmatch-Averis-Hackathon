@@ -142,7 +142,7 @@ def test_uploading_a_pair_returns_the_comparison(tmp_path, monkeypatch):
     from src.api.main import app
 
     with TestClient(app) as client:
-        response = client.post("/try", files={
+        response = client.post("/upload", files={
             "si": ("si.txt", open("data/attachments/email_004_SI.txt", "rb"), "text/plain"),
             "bl": ("bl.txt", open("data/attachments/email_004_BL.txt", "rb"), "text/plain"),
         })
@@ -160,7 +160,7 @@ def test_a_bad_upload_explains_itself_rather_than_500ing():
     from src.api.main import app
 
     with TestClient(app) as client:
-        response = client.post("/try", files={
+        response = client.post("/upload", files={
             "si": ("si.exe", b"binary", "application/octet-stream"),
             "bl": ("bl.txt", BL, "text/plain"),
         })
