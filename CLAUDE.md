@@ -61,7 +61,8 @@ Output goes to `submission.json`, keyed by `email_id`, in the shape of
 
 ```bash
 pip install -r requirements.txt
-pytest -q                       # 153 tests
+cp .env.example .env            # optional; see below
+pytest -q                       # 161 tests, no network, no spend
 python -m src.pipeline          # 520 emails -> submission.json, ~1s, no LLM calls
 ```
 
@@ -76,6 +77,28 @@ resolved by rules    100%
 FINAL SCORE          1.0000
 ```
 
+**And 1.0000 on data it has never seen.** The judges may score us on a different draw,
+so the same pipeline was run against six freshly generated inboxes (`--seed` 3, 7, 42,
+1234, 20260920, 99999 — 1,590 emails in total): 1.0000 on every one, every defect caught
+with the exact field set, 20/20 escalations with no false alarms. Reproduce it with
+`./scripts/check_robustness.sh <path to data_v2>`. That exercise is what found the
+case-collision bug fixed in field_aliases — run it after any change to the rules.
+
+### The API key
+
+`.env` holds the team key and is gitignored — it stays on our machines, and judges
+running this repo get the deterministic path. `src/config.py` loads it; nothing else
+reads `os.environ`.
+
+  * `LLM_MAX_CALLS` (default 40) caps Claude calls per process. The rules resolve the
+    sample inbox alone, so a run that reaches the cap is a run against unfamiliar data;
+    the cap is what stops an accidental full-inbox LLM pass from spending the budget.
+    `python -m src.pipeline` prints the calls it made.
+  * `pytest` never spends anything — `tests/conftest.py` switches the LLM off for the
+    whole session. Keep it that way; tests must stay free, offline and deterministic.
+  * `python scripts/llm_smoke.py` proves the three Claude paths work, on invented input
+    the rules cannot handle. ~4 calls, a few cents. Run it before a demo.
+
 ```
 CLAUDE.md                  this file
 README.md
@@ -89,21 +112,24 @@ src/
   normalize.py             ✅ blanks, numbers, conservative text matching
   comparator.py            ✅ the 5-step decision order
   report.py                ✅ the discrepancy report (the use case's deliverable)
+  config.py                ✅ .env loading, model, call budget — the only env reader
   extractor/
     __init__.py            ✅ dispatcher by file extension
-    _common.py             ✅ pairs -> ExtractedDocument, one place for the rules
+    _common.py             ✅ pairs -> ExtractedDocument + the rules->Claude handoff
     field_aliases.py       ✅ labels, doc-type detection, glyph-collision recovery
     txt_extractor.py       ✅ 192 files
     xlsx_extractor.py      ✅ 22 files
     docx_extractor.py      ✅ 8 files
     pdf_extractor.py       ✅ 28 files: text layer, container table, vision fallback
     llm_extract.py         ✅ Claude text/vision/classify — returns None, never raises
-  api/main.py              ✅ service + human-review screen
   db/schema.sql            ✅ the shape a real deployment persists
+  api/main.py              ✅ service + review screen with working confirm/correct
 scripts/
   run_self_eval.py         ✅ POST submission.json to the organizers' server
   evaluate.py              ✅ score, save a run, diff two runs, error analysis
-tests/                     ✅ 153 tests, contract + every stage + end-to-end invariants
+  llm_smoke.py             ✅ prove the Claude paths work (costs a few cents)
+  check_robustness.sh      ✅ score against freshly generated, never-seen inboxes
+tests/                     ✅ 161 tests, contract + every stage + end-to-end invariants
 ```
 
 Remaining work is judge-facing, not pipeline: see §8.
@@ -251,6 +277,13 @@ python scripts/evaluate.py --ground-truth /path/to/ground_truth.json
 python scripts/evaluate.py --server http://localhost:8080       # organizers' docker
 python scripts/evaluate.py --ground-truth <key> --save out/runs/today.json
 python scripts/evaluate.py --compare out/runs/a.json out/runs/b.json
+
+# will it hold on data we have never seen? (rules only, free)
+./scripts/check_robustness.sh /path/to/data_v2
+
+# are the Claude paths alive? (~4 calls, a few cents)
+python scripts/llm_smoke.py
+python scripts/llm_smoke.py --vision      # + one scanned page
 ```
 
 ---
@@ -259,12 +292,15 @@ python scripts/evaluate.py --compare out/runs/a.json out/runs/b.json
 
 The pipeline is done. These are rubric lines, not accuracy:
 
-1. **Technical Feasibility & Validation (15).** `scripts/evaluate.py` saves and diffs
-   runs; still to do is the ablation table — rules-only vs rules+LLM vs LLM-only across
-   accuracy, cost and latency. That table is the argument for the design.
-2. **Technology Integration (15).** The Claude paths exist and degrade cleanly, but
-   have not been run with a key. Do one measured run, record `rule_pct`, cost and
-   wall-clock, and keep the numbers.
+1. **Technical Feasibility & Validation (15).** `evaluate.py` saves and diffs runs and
+   `check_robustness.sh` proves the six-seed result above. Still to do is the ablation
+   table — rules-only vs rules+LLM vs LLM-only across accuracy, cost and latency. That
+   table is the argument for the design; the rules-only column is already measured.
+2. **Technology Integration (15).** All three Claude paths are verified working with a
+   real key: classification of emails outside our templates, extraction from a layout
+   with no aliases at all (7/7 fields, and it took the gross weight rather than the net
+   one), and vision on the image-only scans. What is missing is the cost and latency
+   numbers next to them.
 3. **Innovation (10).** What is distinctive here and should be said out loud:
    confidence-gated escalation, the glyph de-interleaving, provenance on every value
    (`raw_label` + `source` + `confidence`), and the review screen feeding corrections

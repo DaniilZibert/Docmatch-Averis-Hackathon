@@ -27,6 +27,10 @@ own `score_cli.py`:
 | reliability · escalation recall / precision | diagnostic | 1.000 / 1.000 (20 flagged, 20 gold) |
 | resolved by rules, no LLM call | diagnostic | 100% |
 
+The same 1.0000 holds on data the system has never seen: six freshly generated inboxes
+(1,590 emails, different seeds) score 1.0000 each, with every defect caught on the exact
+field set. `./scripts/check_robustness.sh <path to data_v2>` reproduces it.
+
 Claude is wired in for the cases the rules cannot reach — scanned pages, unparseable
 layouts, unrecognised emails — and every one of those paths degrades to an honest
 `NEEDS_REVIEW` when there is no key, no network or no library. The demo cannot be
@@ -38,7 +42,7 @@ taken down by a rate limit.
 pip install -r requirements.txt
 cp .env.example .env          # optional: add ANTHROPIC_API_KEY for the fallbacks
 
-pytest -q                     # 153 tests
+pytest -q                     # 161 tests — free, offline, no API calls
 python -m src.pipeline        # 520 emails -> submission.json + a run summary
 python -m src.pipeline --report out/report.md      # + the discrepancy report
 ```
@@ -46,10 +50,14 @@ python -m src.pipeline --report out/report.md      # + the discrepancy report
 The service and the human-review screen:
 
 ```bash
-uvicorn src.api.main:app --reload
-curl -X POST localhost:8000/run
-open http://localhost:8000
+uvicorn src.api.main:app --reload     # http://localhost:8000
+curl -X POST localhost:8000/run       # process the inbox, then open the page
 ```
+
+The screen lists every case a person has to settle and every discrepancy found, each
+with the seven fields side by side and the label each value was read under. Tick the
+rows that really differ and press **Confirm mismatch**, or **No mismatch** to clear the
+case — the verdict, the counters and `/report` update immediately.
 
 Measuring a change:
 
@@ -61,6 +69,12 @@ python scripts/evaluate.py --server http://localhost:8080
 # keep runs and diff them email by email
 python scripts/evaluate.py --ground-truth <key> --save out/runs/before.json
 python scripts/evaluate.py --compare out/runs/before.json out/runs/after.json
+
+# will it hold on data nobody has seen? (generates fresh inboxes, rules only, free)
+./scripts/check_robustness.sh /path/to/data_v2
+
+# are the Claude fallbacks alive? (~4 calls, a few cents)
+python scripts/llm_smoke.py --vision
 ```
 
 ## What it handles
