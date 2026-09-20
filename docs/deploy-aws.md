@@ -1,5 +1,9 @@
 # Putting the service on the internet
 
+> **Already done once.** The instance, Elastic IP, security group and key are
+> provisioned — see [aws-resources.md](aws-resources.md) for the ids and the teardown
+> commands. This document is how it was done and how to do it again.
+
 Goal: a URL a judge can open on their phone, with HTTPS and a real hostname, that keeps
 working after we close our laptops.
 
