@@ -224,6 +224,7 @@ docker compose -f deploy/docker-compose.prod.yml up -d
 
 | | |
 |---|---|
+| **[docs/HANDOFF.md](docs/HANDOFF.md)** | read first if you are joining to work on the submission — self-contained, every measured number in one place |
 | **[CLAUDE.md](CLAUDE.md)** | read first if you are going to change code: the rules, what the score rewards, and every trap in the data |
 | **[docs/PLAN.md](docs/PLAN.md)** | what is done, what is left, and who does which |
 | **[docs/OPERATIONS.md](docs/OPERATIONS.md)** | the server, the domain, CI/CD, the AI switch, teardown |

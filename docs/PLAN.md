@@ -334,19 +334,19 @@ Done, in the repo:
 * Confirmed nothing executable still reads the four dead CI variables — the pipeline
   uses `DEPLOY_HOST` and nothing else.
 
-**Still needs Daniil's hands** (they need credentials I do not have):
+**Done by Daniil, 21 September:**
 
-* ⬜ **Delete the four dead CI variables.** Settings → CI/CD → Variables: remove
-  `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`, `DEPLOY_USER`, `DEPLOY_PATH`. `DEPLOY_HOST`
-  stays. They are unused, but a private key sitting in a project's variables is worth
-  deleting on principle rather than leaving because it is harmless today.
-* ⬜ **Repository visibility: it stays public, and that is now a decision rather than an
-  accident.** The rules require a public repository link and a publicly accessible
-  prototype, so closing it is not available to us.
-* ⬜ **Mirror to GitHub.** The form says "GitHub Repository Link" and we are on GitLab.
-  Settings → Repository → Mirroring repositories, push to a new GitHub repo. Ten
-  minutes, removes a question nobody wants to answer during judging.
-* ⬜ **Message the organizers about the dataset.** Draft in "Data" below.
+* ✅ **Mirrored to GitHub.** The submission form asks for a GitHub link and we are on
+  GitLab; the mirror closes that gap.
+* ✅ **The four dead CI variables are gone** — `SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`,
+  `DEPLOY_USER`, `DEPLOY_PATH`. `DEPLOY_HOST` stays, it is the one the pipeline reads.
+* ✅ **Repository visibility: public, as a decision.** The rules require a public
+  repository link and a publicly accessible prototype, so closing either is not
+  available to us.
+* ✅ **Dataset: decided not to raise it.** Written up below, and the call is Daniil's:
+  no rule covers the supplied data, the organizers have said nothing about it, and every
+  team holds the same files. Recorded rather than deleted so the reasoning is on the
+  record if it ever comes up.
 
 **A5 · Learning from corrections — P2** *(Innovation, 10)*
 Mine a reviewer's accepted correction into `field_aliases` so the system improves on the
@@ -354,41 +354,14 @@ layouts this customer actually sends. The review loop and provenance already exi
 
 ### Person B — Nikita: the submission itself
 
-Three of the four mandatory components are yours, and none of them exists yet.
+**Moved to [HANDOFF.md](HANDOFF.md)** — one self-contained document with the context, the
+constraints, all six items and every measured number, so it can be read cold without
+opening anything else. Kept there rather than here so there is one source of truth for
+the submission work instead of two that drift.
 
-**B0 · Demo video — P0** *(mandatory; marks deducted for length)*
-Five minutes maximum, YouTube unlisted or public. Required shape: intro → problem →
-tech stack → live demo → impact. Script it, rehearse it twice, then record.
-The demo spine that works: inbox arrives → 520 triaged in a second → open a flagged case
-→ the two documents side by side with the differing labels → **a scanned BL being read by
-AI vision** → a case we refused to decide, and why → settle it and watch the report change.
-That vision moment is what makes AI visibly a key component. Do not cut it.
-*Done when:* uploaded, link works in an incognito window, under 5:00.
-
-**B1 · Slide deck — P0** *(mandatory; Product & Impact is 30 points)*
-Required sections, named in the rules: **Technical Architecture, Implementation Details,
-Challenges Faced, Future Roadmap.** Numbers come from A1/A2 — ask early, do not wait.
-Include the reliability story: 20 of 520 escalated, zero false alarms, and why refusing
-to answer is a feature rather than a gap.
-
-**B2 · Project description — P1** *(mandatory, short)*
-Name, purpose, problem statement. A paragraph, but it is the first thing a judge reads.
-
-**B3 · The real inbox — P1** *(Practical Value, 10)*
-The sample data is generated from real Outlook `.msg` files. Show the path to a live
-inbox: IMAP or Microsoft Graph, `.msg` parsing, what changes and what does not. A working
-`src/ingest/msg.py` would be strong; a clear slide is enough.
-*Self-contained — new files only.*
-
-**B4 · Fresh-eyes review — P1**
-Include `/upload`: upload two documents of your own invention and see whether the result
-is understandable to someone who did not build it.
-Read `CLAUDE.md` first: several things in the extractors look like bugs and are
-deliberate, and that section says which. Then try to break <https://docmatch.tech>.
-Anything confusing to you is confusing to a judge.
-
-**B5 · Auto-drafted reply — P2** *(Innovation, 10)*
-Given a MISMATCH, draft the email back to the carrier. Turns a detector into a colleague.
+In short: **B0** demo video, **B1** slide deck, **B2** project description — all three
+mandatory, none started. **B3** real-inbox path and **B4** fresh-eyes review are P1,
+**B5** auto-drafted reply is P2.
 
 ### Together, before noon on the 22nd
 

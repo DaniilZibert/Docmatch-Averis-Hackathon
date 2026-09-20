@@ -1,5 +1,10 @@
 # CLAUDE.md — read this first
 
+> **Joining the project to work on the submission (video, deck, description) rather than
+> on the code? Read [docs/HANDOFF.md](docs/HANDOFF.md) instead — it is self-contained and
+> has every number you need.** This file is for changing code.
+
+
 Instructions for anyone, human or Claude, working on this code. **What the project is,
 the rules, and every trap in the data.**
 
@@ -114,8 +119,6 @@ src/
     store.py               state + the run, started automatically on boot
     ui.py                  the screens, server-rendered, no build step
     uploads.py             /upload — one SI/BL pair, or a whole inbox as a zip
-    store.py               state + the run, started automatically on boot
-    ui.py                  the screens, server-rendered, no build step
 scripts/
   evaluate.py              score a run, save it, diff two runs, error analysis
   check_robustness.sh      score against freshly generated, never-seen inboxes
