@@ -153,6 +153,11 @@ button:disabled{opacity:.5;cursor:default}
 .actions{padding:13px 16px;border-top:1px solid var(--line);background:#fafbfc;
  display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .hint{color:var(--faint);font-size:12px}
+.b-amber{background:var(--amber);border-color:var(--amber);color:#fff}
+.b-amber:hover{background:#93370d}
+a.skip{font-size:13px;color:var(--dim);text-decoration:underline;align-self:center}
+.want{margin:4px 0 0 18px;padding:0}
+.want li{font-size:13px;line-height:1.7;color:var(--ink)}
 
 /* email pane */
 .meta{font-size:12px;color:var(--dim);margin-bottom:10px}
@@ -215,7 +220,7 @@ document.addEventListener('auxclick', (ev) => {        // middle click opens a t
   window.open(row.dataset.href, '_blank');
 });
 
-async function decide(id, status, back) {
+async function decide(id, status, back, note) {
   const box = document.getElementById('case-' + id);
   const fields = status === 'MISMATCH'
     ? [...box.querySelectorAll('input.pickfield:checked')].map(c => c.value) : [];
@@ -227,7 +232,8 @@ async function decide(id, status, back) {
   // settling a case costs nothing, so it needs no token
   const r = await fetch('/review/' + id, {method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({status: status, defect_fields: fields, reviewer: 'reviewer'})});
+    body: JSON.stringify({status: status, defect_fields: fields,
+                          reviewer: 'reviewer', note: note || null})});
   if (!r.ok) { alert('Could not save: ' + r.status);
     box.querySelectorAll('button').forEach(b => b.disabled = false); return; }
   location.href = back || location.pathname + location.search;
@@ -511,6 +517,51 @@ def _email_pane(email: EmailRecord | None) -> str:
   <div class=bodytext>{e(email.body)}</div></div></div>"""
 
 
+# The banner says why we stopped. This says what to do about it. Without it an
+# escalation is a dead end: the queue insists a person is needed, the person opens
+# the case and finds an empty column.
+REVIEW_NEXT_STEP = {
+    "missing_attachment":
+        "Reply to the sender and ask for the Shipping Instruction and the draft Bill "
+        "of Lading. Nothing can be checked until they arrive.",
+    "wrong_doc_type":
+        "What came in is some other document. Ask the sender for the draft Bill of "
+        "Lading itself.",
+    "unreadable":
+        "Open the attachment on the left. If you can read it, key the values in by "
+        "hand; if it is genuinely corrupt, ask the sender to resend it.",
+    "missing_value":
+        "The field is blank on one side, not different. Check it against the booking, "
+        "or ask the sender to fill it in.",
+}
+
+
+def _nothing_to_compare_pane(result: EmailResult, email: EmailRecord | None) -> str:
+    """Stands in for the comparison table when there was no pair to compare.
+
+    An email can be escalated before any document is read — nothing attached, or
+    nothing readable — and it still lands in somebody's queue. Saying what we
+    expected, what actually arrived, and what to do next is the whole content of
+    the review in that case.
+    """
+    arrived = "".join(f'<li>{e(a.split("/")[-1])}</li>'
+                      for a in (email.attachments if email else [])) or \
+              '<li class=hint>nothing was attached</li>'
+    reason = result.review_reason.value if result.review_reason else None
+    step = REVIEW_NEXT_STEP.get(reason, "")
+    return f"""<div class=pane><header>There is nothing to compare</header><div class=pad>
+  <p class=note>This email asks for a draft Bill of Lading to be checked against a
+  Shipping Instruction. That pair never reached us, so none of the seven fields
+  could be read — this is not a clean result, it is an unanswered question.</p>
+  <div class=meta><b>Expected</b>
+    <ul class=want><li>Shipping Instruction</li><li>draft Bill of Lading</li></ul></div>
+  <div class=meta><b>Arrived</b><ul class=want>{arrived}</ul></div>
+  {f'<p class=note><b>What to do:</b> {e(step)}</p>' if step else ''}
+  <p class=note>If you already have the documents, you can
+  <a href="/upload">upload the pair</a> and the check will run on them.</p>
+</div></div>"""
+
+
 def _comparison_pane(result: EmailResult, actionable: bool) -> str:
     if not result.comparisons:
         return ""
@@ -540,7 +591,11 @@ def _comparison_pane(result: EmailResult, actionable: bool) -> str:
 def case(store, result: EmailResult, back: str = "/", llm=None) -> str:
     email = store.email(result.email_id)
     settled = result.email_id in store.resolutions
-    actionable = bool(result.comparisons)
+    # Whether there are rows to tick — NOT whether the reviewer has anything to do.
+    # Conflating the two is what left every missing-attachment case with no buttons
+    # under a banner telling the reviewer to review it.
+    tickable = bool(result.comparisons)
+    open_review = result.status is Status.NEEDS_REVIEW and not settled
 
     tone = {"MISMATCH": "red", "NEEDS_REVIEW": "amber", "OK": "green"}[result.status.value]
     reason = result.review_reason.value if result.review_reason else None
@@ -557,15 +612,29 @@ def case(store, result: EmailResult, back: str = "/", llm=None) -> str:
                         f'</div>')
 
     actions = ""
-    if actionable and not settled:
+    if (tickable and not settled) or open_review:
         eid = e(result.email_id)
         nxt = store.next_open_review(result.email_id)
         target = f"/case/{nxt}" if nxt and nxt != result.email_id else back
+        # A plain link, deliberately. Recording a resolution is exactly what takes a
+        # case out of the queue, so a button that settles the case cannot honestly be
+        # labelled "leave open" — the old one lied, and quietly emptied the queue.
+        skip = f'<a class=skip href="{e(target)}">Leave open</a>'
+    if tickable and not settled:
         actions = f"""<div class=actions>
   <button class=b-red onclick="decide('{eid}','MISMATCH','{e(target)}')">Confirm discrepancy</button>
   <button class=b-green onclick="decide('{eid}','OK','{e(target)}')">No mismatch</button>
-  <button onclick="decide('{eid}','NEEDS_REVIEW','{e(target)}')">Leave open</button>
+  {skip}
   <span class=hint>tick the rows that really differ, then confirm</span></div>"""
+    elif open_review:
+        # Nothing to tick, but the case is open and a person is being asked to act,
+        # so the two things a person can actually conclude have to be on the screen.
+        actions = f"""<div class=actions>
+  <button class=b-amber onclick="decide('{eid}','NEEDS_REVIEW','{e(target)}','documents requested from the sender')">Documents requested</button>
+  <button class=b-green onclick="decide('{eid}','OK','{e(target)}','no document check needed')">No check needed</button>
+  {skip}
+  <span class=hint>chasing it clears your queue but keeps the verdict at
+  NEEDS_REVIEW — nothing has been checked yet</span></div>"""
 
     provenance = ""
     if result.classified_by_rule:
@@ -579,7 +648,7 @@ def case(store, result: EmailResult, back: str = "/", llm=None) -> str:
 {settled_note}{banner}
 <div id="case-{e(result.email_id)}" class=cols>
   <div>{_email_pane(email)}</div>
-  <div>{_comparison_pane(result, actionable)}
+  <div>{_comparison_pane(result, tickable) or (_nothing_to_compare_pane(result, email) if open_review or result.review_reason else "")}
     <div class=pane>{provenance}{actions if actions else '<div class=pad><span class=hint>Nothing to decide on this one.</span></div>'}</div>
   </div>
 </div>""", active="", run=store.run, llm=llm)

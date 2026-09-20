@@ -86,6 +86,38 @@ def test_a_blank_field_is_never_pre_ticked_as_a_defect(client):
     assert 'value="consignee" checked' in mismatch
 
 
+def test_an_escalation_with_no_attachments_is_not_a_dead_end(client):
+    """email_506 is routed to BL_COMPARISON but nothing was attached, so there are no
+    comparison rows. The queue still asks a person to look at it, so the case has to
+    say what is missing and offer a way to close it — otherwise the reviewer arrives
+    to an empty column under a banner telling them to review."""
+    page = client.get("/case/email_506").text
+    assert "Nothing to decide on this one" not in page
+    assert "There is nothing to compare" in page
+    assert "nothing was attached" in page                # what actually arrived
+    assert "Reply to the sender" in page                 # what to do about it
+    assert "Documents requested" in page                 # and two ways to close it
+    assert "No check needed" in page
+
+
+def test_leave_open_really_leaves_the_case_open(client):
+    """Recording a resolution is exactly what removes a case from the queue, so the
+    button labelled "leave open" must not record one. It used to, and quietly drained
+    the review queue one click at a time."""
+    open_before = len(STORE.open_reviews())
+    page = client.get("/case/email_501").text            # a case with rows to tick
+    assert ">Leave open</a>" in page                     # a link, not a decision
+    assert "'NEEDS_REVIEW'" not in page                  # nothing settles it as-is
+    assert len(STORE.open_reviews()) == open_before
+
+
+def test_a_clean_email_still_offers_nothing_to_decide(client):
+    """The fix must not hand review buttons to the 400-odd emails that are simply fine."""
+    page = client.get("/case/email_011").text            # GENERAL, no rows, status OK
+    assert "Nothing to decide on this one" in page
+    assert "Documents requested" not in page
+
+
 def test_a_reviewer_decision_changes_the_verdict_and_the_report(client):
     before = client.get("/health").json()
     response = client.post("/review/email_520",
