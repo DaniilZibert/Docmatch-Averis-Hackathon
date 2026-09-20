@@ -172,11 +172,21 @@ The pipeline is finished. **P0 first, then P1. P2 is what gets dropped.**
 
 ### Person A — Daniil: make the AI visible and measured
 
-**A0 · Put the key on the server and turn the switch on — P0** *(15 minutes)*
-Right now the demo box says `AI no key`. That single phrase, on a public page, argues
-against a mandatory requirement. Add the key to the server's `.env`, switch AI on, leave
-it on through judging. `LLM_MAX_CALLS` still caps the spend.
-See [OPERATIONS.md](OPERATIONS.md#putting-the-key-on-the-server).
+**A0 · Turn the AI on — P0, but NOT until the submission is in** *(one command)*
+
+```bash
+./scripts/enable_ai.sh          # key in place, AI on, admin token printed
+```
+
+The demo box says `AI no key`, which on a public page argues against a mandatory
+requirement — so this has to happen before judging. It must **not** happen early: `/run`
+costs six vision calls and anyone can press it.
+
+The guards are already deployed and tested: an admin token on the two endpoints that
+spend money, a 20-second cooldown on `/run`, and a cumulative $2.50 ceiling written to
+disk on every call that switches the AI off by itself when reached. So turning it on is
+now a single safe command rather than a risk.
+See [OPERATIONS.md](OPERATIONS.md#3-the-ai-switch-and-what-stops-it-emptying-the-budget).
 
 **A1 · Ablation table — P0** *(was P1; the rules promoted it)* *(Technology Integration 15,
 Technical Feasibility 15)*

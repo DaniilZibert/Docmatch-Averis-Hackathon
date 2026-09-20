@@ -111,49 +111,77 @@ docker compose -f deploy/docker-compose.prod.yml up -d --build
 
 ---
 
-## 3. The AI switch
+## 3. The AI switch, and what stops it emptying the budget
 
-**Claude is off, and nothing spends until somebody turns it on.** The rules score
-1.0000 on the sample inbox without a single API call, so the expensive path is the one
-you have to ask for. In the header of every screen:
+**Claude is off, and there is no key on the server.** That is deliberate and it is not
+only about cost discipline: the demo is a public URL, and until the guards below existed
+a stranger could have emptied the whole budget in about a minute.
+
+### Why a public URL with a key is dangerous by default
+
+`POST /run` re-processes the inbox. With AI on that is six vision calls — the image-only
+scans — roughly $0.07 a time. It is a button, so it was unauthenticated. And
+`store._run()` calls `reset_budget()` on every run, so `LLM_MAX_CALLS` was a *per-run*
+number that any caller could reset simply by calling again. A loop against `/run` costs
+about $5 in sixty seconds.
+
+### The three guards
+
+| guard | what it stops |
+|---|---|
+| `SDOC_ADMIN_TOKEN` on `POST /run` and `POST /settings/llm` | strangers starting runs or switching spending on |
+| 20-second cooldown on `/run` | an authorised click becoming a loop |
+| **`LLM_SPEND_CAP_USD`** (default $2.50) | everything else |
+
+The ceiling is the one that matters. It is cumulative, written to the state file **on
+every single call** rather than at the end of a run — a process killed mid-run still
+spent the money — and it survives restarts. When it is reached the AI switches itself
+off and the header reads `AI capped`. It overrides the switch: a budget is a budget
+whatever anybody clicked. Raising it is a deliberate act.
+
+Everything else stays open, because the submission rules require the prototype to be
+publicly accessible. `POST /review/{id}` is deliberately unguarded too: settling a case
+costs nothing and is the point of the product, and the worst a stranger can do is mark
+one resolved, which the next run undoes.
+
+### Turning it on, after submission
+
+```bash
+./scripts/enable_ai.sh --status      # what the server is doing and what it has spent
+./scripts/enable_ai.sh               # key in place, AI on, fresh admin token printed
+./scripts/enable_ai.sh --off         # back off; the key stays
+```
+
+The script writes the key and a freshly generated `SDOC_ADMIN_TOKEN` into the server's
+`.env`, restarts, waits for health and prints the token. Keep that token with the other
+credentials — the header's **Re-run** button and the AI switch ask for it once and
+remember it in your browser.
+
+In the header:
 
 ```
 ●  520 emails in 1.3s · no LLM calls    [ ○──  AI off ]    Re-run
+●  520 emails in 1.3s · 6 calls         [ ──●  AI on   6 calls · $0.07 of $2.50 ]
 ```
 
-Click it: green, and it shows the calls made and the running cost. Click again: off.
-No redeploy, no ssh. The setting is written to the `sdoc_state` volume and survives a
-restart, including a CI deploy. `POST /settings/llm {"enabled": true}` is the same
-thing for scripts.
-
-Four layers, deliberately redundant, because the failure here costs real money:
-
-| layer | what it does |
-|---|---|
-| the switch | overrides everything, persists, one click |
-| `SDOC_LLM=on\|off` | the default a process starts with |
-| `LLM_MAX_CALLS` (40) | caps calls per run whatever the switch says |
-| `conftest.py` + CI | the test suite and the pipeline pin it off independently |
-
-### Putting the key on the server
-
-The header says `AI no key` until you do. Only needed if you want the scanned-document
-path live in a demo.
-
-```bash
-ssh -i ~/.ssh/sdoc-key.pem ubuntu@docmatch.tech
-cd averis-hackaton && nano .env      # ANTHROPIC_API_KEY=sk-ant-...
-docker compose -f deploy/docker-compose.prod.yml up -d
-```
-
-It goes in `.env` on the box and nowhere else — never in the repo, never in the image,
-never in a CI variable. Confirm it arrived without printing it:
+The key goes in `.env` on the box and nowhere else — never in the repo, never in the
+image, never in a CI variable. Confirm it arrived without printing it:
 
 ```bash
 docker compose -f deploy/docker-compose.prod.yml exec app env | grep -c ANTHROPIC_API_KEY
 ```
 
----
+### If the ceiling trips
+
+```bash
+# raise it
+ssh -i ~/.ssh/sdoc-key.pem ubuntu@docmatch.tech
+cd averis-hackaton && sed -i 's/^LLM_SPEND_CAP_USD=.*/LLM_SPEND_CAP_USD=5.00/' .env
+docker compose -f deploy/docker-compose.prod.yml up -d
+```
+
+Clearing the ledger instead of raising the ceiling is possible (`config.reset_spend()`)
+but it throws away the record of what has actually been spent. Raise the number.
 
 ## 4. When it does not work
 
