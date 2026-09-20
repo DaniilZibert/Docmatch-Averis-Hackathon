@@ -51,6 +51,8 @@ stop/start and your DNS record goes stale mid-event.
 
 ## 2. The domain — a free `.tech` from the Student Pack
 
+> Step by step, with the real IP filled in: **[domain-tech.md](domain-tech.md)**.
+
 The GitHub Student Developer Pack includes a free `.tech` domain for a year. Claim it
 at <https://get.tech/github-student-developer-pack> (sign in with GitHub so it can see
 your student status) and pick something short — `averis-sdoc.tech`, `sdoc-check.tech`.

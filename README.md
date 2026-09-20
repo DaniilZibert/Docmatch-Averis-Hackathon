@@ -97,9 +97,9 @@ docker compose -f deploy/docker-compose.prod.yml up -d --build
 
 The app behind Caddy, which gets a Let's Encrypt certificate on its own. Pushing to
 `main` runs the tests, builds the image, smoke-tests the container and deploys it
-(`.gitlab-ci.yml`). The full runbook — EC2, security group, a free `.tech` domain from
-the GitHub Student Pack, and the CI variables — is in
-**[docs/deploy-aws.md](docs/deploy-aws.md)**.
+(`.gitlab-ci.yml`). The full runbook is **[docs/deploy-aws.md](docs/deploy-aws.md)**; what is currently
+provisioned is **[docs/aws-resources.md](docs/aws-resources.md)**; pointing a free
+`.tech` domain at it is **[docs/domain-tech.md](docs/domain-tech.md)**.
 
 Measuring a change:
 
