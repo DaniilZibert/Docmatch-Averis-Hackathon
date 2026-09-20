@@ -26,6 +26,7 @@ import logging
 import os
 import re
 
+from .. import config
 from ..models import (COMPARED_FIELDS, NUMERIC_FIELDS, Category, DocType,
                       ExtractedDocument, ExtractedField, FieldSource)
 from ..normalize import is_blank, parse_number
@@ -33,10 +34,16 @@ from ..normalize import is_blank, parse_number
 log = logging.getLogger(__name__)
 
 # Rules that recover at least this many of the 7 fields are trusted without the LLM.
+# Below it, _common.build_document hands the document text to Claude instead of
+# declaring it unreadable — the path that matters when the layout is one we have never
+# seen, which is exactly what a judge's own data would be.
 MIN_FIELDS_FOR_RULES = 5
 
-DEFAULT_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
 MAX_TOKENS = 1024
+
+# Spend guard. Every call goes through _ask, which stops once the budget is gone.
+_calls_made = 0
+_warned_over_budget = False
 
 EXTRACTION_PROMPT = """You are reading one shipping document (a Shipping Instruction or a
 draft Bill of Lading). Return ONLY a JSON object with exactly these keys:
@@ -88,6 +95,19 @@ _client = None
 _client_failed = False
 
 
+def calls_made() -> int:
+    """How many Claude calls this process has made. Printed in the run summary so a
+    run's cost is visible rather than discovered on the invoice."""
+    return _calls_made
+
+
+def reset_budget() -> None:
+    """Start the call budget over — used by long-lived processes like the API."""
+    global _calls_made, _warned_over_budget
+    _calls_made = 0
+    _warned_over_budget = False
+
+
 def _get_client():
     """The Anthropic client, or None when the LLM path is unavailable.
 
@@ -98,8 +118,8 @@ def _get_client():
     if _client is not None or _client_failed:
         return _client
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key or api_key.startswith("sk-ant-..."):
+    api_key = config.api_key()
+    if not api_key:
         log.info("ANTHROPIC_API_KEY is not set — running rules-only; "
                  "anything the rules cannot decide escalates to a human.")
         _client_failed = True
@@ -127,13 +147,27 @@ def llm_available() -> bool:
 
 
 def _ask(content, *, max_tokens: int = MAX_TOKENS) -> str | None:
-    """One Claude call. Returns the text, or None on any failure."""
+    """One Claude call. Returns the text, or None on any failure or once the budget
+    for this process is spent."""
+    global _calls_made
     client = _get_client()
     if client is None:
         return None
+
+    budget = config.max_llm_calls()
+    if _calls_made >= budget:
+        global _warned_over_budget
+        if not _warned_over_budget:
+            _warned_over_budget = True             # a refusal is not a call; say it once
+            log.warning("LLM call budget of %d reached — the rest of this run stays on "
+                        "the deterministic path and escalates what it cannot decide. "
+                        "Raise LLM_MAX_CALLS if that is intended.", budget)
+        return None
+    _calls_made += 1
+
     try:
         message = client.messages.create(
-            model=DEFAULT_MODEL,
+            model=config.model(),
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": content}],
         )
@@ -229,6 +263,6 @@ def classify_email(subject: str, body: str) -> Category | None:
     return None
 
 
-__all__ = ["MIN_FIELDS_FOR_RULES", "DEFAULT_MODEL", "EXTRACTION_PROMPT",
-           "CLASSIFICATION_PROMPT", "COMPARED_FIELDS", "llm_available",
+__all__ = ["MIN_FIELDS_FOR_RULES", "EXTRACTION_PROMPT", "CLASSIFICATION_PROMPT",
+           "COMPARED_FIELDS", "llm_available", "calls_made", "reset_budget",
            "extract_from_text", "extract_from_image", "classify_email"]
