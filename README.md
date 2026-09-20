@@ -15,10 +15,22 @@ cannot be read.
                  + Claude      + Claude vision       + the SI/BL rows side by side
 ```
 
+## How it works
+
+**Deterministic where that is provably reliable, AI where it is not.** Template rules
+carry the ordinary traffic in about a second; Claude handles what no rule can — scanned
+pages with no text layer, document layouts we have never seen, emails outside our
+templates — and vision reads the image-only bills of lading that nothing else can open.
+Every AI path degrades to an honest `NEEDS_REVIEW` when the key, the network or the
+library is missing, so the demo cannot be taken down by a rate limit.
+
+Splitting it that way is the point: it is what makes the system both accurate and
+auditable, and both halves are measured rather than asserted.
+
 ## Where it stands
 
-Rules only, no API calls, the whole inbox in ~1.3 seconds, measured with the
-organizers' own `score_cli.py`:
+Measured with the organizers' own `score_cli.py` — the deterministic path alone, over
+520 emails in ~1.3 seconds:
 
 | axis | weight | score |
 |---|---|---|
@@ -27,16 +39,17 @@ organizers' own `score_cli.py`:
 | end-to-end · defects caught with the exact field set | 50% | **1.0000** (46/46) |
 | **final score** | | **1.0000** |
 | reliability · escalation recall / precision | diagnostic | 1.000 / 1.000 (20 flagged, 20 gold) |
-| resolved by rules, no LLM call | diagnostic | 100% |
+| resolved deterministically, no AI call needed | diagnostic | 100% |
 
 **And 1.0000 on data it has never seen** — six freshly generated inboxes, 1,590 emails,
 different seeds, every defect caught on the exact field set.
 `./scripts/check_robustness.sh` reproduces it.
 
-Claude is wired in for what the rules cannot reach — scanned pages, unfamiliar layouts,
-emails outside our templates — and every one of those paths degrades to an honest
-`NEEDS_REVIEW` with no key, no network or no library. The demo cannot be taken down by
-a rate limit.
+That the rules reach 1.0000 on this dataset is a property of *this* dataset, not a claim
+that the AI is decorative: six of the attachments are image-only scans that vision reads
+and no parser can, and on layouts outside these templates the rules hand over to Claude
+rather than guessing. `scripts/llm_smoke.py` demonstrates that path reading 7/7 fields
+out of a document with no recognisable labels.
 
 ## Quick start
 

@@ -97,98 +97,198 @@ Claude paths work on input the rules cannot handle.
 
 ---
 
-## Left — and it is all rubric work
+## The rules, and what they change
 
-Two days. The score is finished; these earn points on the judges' 100, not on the
-scoreboard. **P1 first. If time runs out, P2 is what gets dropped.**
+Source: [Rules & Regulations](https://docs.google.com/document/d/10PZgxtw4qvDg19NESDZPXt2oc6pSYsj9DKoKOY8PvdI/edit)
+· [Preliminary judging criteria](https://docs.google.com/document/d/1EiI_mqJYeMN0D-dtZ_npCavVGXVcePFmcZ7O4d4ygQI/edit)
+· [Final judging criteria](https://docs.google.com/document/d/1S-bLf45JOabMl1QUDgl4F6NTwuwD7UKbhPKh74sqaRo/edit)
 
-### Person A — Daniil: the evidence
+**Deadline: 22 September, 12:00 p.m.** — noon, not end of day.
 
-You have the harness, the API key and the infrastructure context.
+### The one that changes our strategy
 
-**A1 · Ablation table — P1** *(Technical Feasibility & Validation, 15)*
-Rules-only vs rules+LLM vs LLM-only, across accuracy, cost and latency. The rules-only
-column is already measured; the other two need the switch on. ~30 calls, under $0.50.
-`scripts/evaluate.py --save` then `--compare` produces the diff.
-*Done when:* a three-row table with real numbers, in the slides and in the README.
-*Why it matters:* it is the argument for the whole design. Right now "we did not need
-an LLM" is a claim; this makes it a measurement.
+> "The submitted solution must incorporate **Artificial Intelligence (AI) Technology as
+> a key component**."
+> "All submissions must incorporate AI and utilize cloud infrastructure… Solutions that
+> do not meaningfully integrate cloud infrastructure may receive significantly reduced
+> scores."
 
-**A2 · Measured LLM run — P1** *(Technology Integration, 15)*
-Turn the switch on once, run the full inbox, record `rule_pct`, wall-clock and dollars.
-All three paths are verified working; what is missing is the numbers beside them.
-*Done when:* the figures are in A1's table and the cost per 1000 emails is on a slide.
+We have been selling the opposite. The README opens with "Rules only, no API calls", the
+live header says **`no LLM calls`** and **`AI no key`**, and our headline achievement is
+a perfect score with zero AI. A judge checking a mandatory requirement against that page
+has everything they need to mark us down.
 
-**A3 · Housekeeping — P1** *(15 minutes, do it first)*
-- Delete the four dead CI variables (`SSH_PRIVATE_KEY`, `SSH_KNOWN_HOSTS`,
-  `DEPLOY_USER`, `DEPLOY_PATH`).
-- Decide on repository visibility. **It is public right now** — an anonymous clone
-  succeeded. Competitors can read everything. Deliberate or not, decide it on purpose.
-- Put the API key on the server if the demo will show vision.
+The engineering is not wrong — deterministic where it is reliable, AI where it is not,
+is the right design and we can defend it. What is wrong is that our materials actively
+hide the AI, and that on the demo box the AI is switched off with no key.
 
-**A4 · Learning from corrections — P2** *(Innovation, 10)*
-When a reviewer corrects a field, mine the label they accepted into `field_aliases`, so
-the system gets better at the layouts this customer actually sends. The review loop and
-the provenance data already exist; this closes it. A counter of "aliases learned" makes
-it visible in the demo.
+Be honest about the size of it: on this dataset the rules resolve all 520 emails and
+vision fires on exactly 6 — the image-only scans, which nothing deterministic can read.
+That is real and irreplaceable, but it is 6 of 520, and "key component" needs to be
+visible and measured rather than asserted. **A1 and A2 below stop being nice-to-have.**
 
-### Person B — Nikita: the story
+### Hard requirements we must satisfy
 
-Nothing here needs the internals. It needs someone who can look at this the way a judge
-will — which is easier for you than for us right now.
+| requirement | state |
+|---|---|
+| AI as a key component | ⚠️ **at risk** — see above |
+| Cloud infrastructure, meaningfully integrated | ✅ AWS EC2, Caddy, CI/CD, registry |
+| Repository link, **public**, clear README with setup | ✅ public — and it must stay that way |
+| Live prototype link, **publicly accessible** to judges | ✅ <https://docmatch.tech> |
+| Demo video, ≤ 5 min, YouTube unlisted or public | ❌ **not started** |
+| Slide deck, public link | ❌ **not started** |
+| Project description | ❌ not started |
+| All work done during the hackathon | ✅ |
 
-**B1 · Demo script — P1** *(affects every rubric line)*
-Three minutes, written down, rehearsed twice. The spine that works:
-inbox arrives → 520 triaged in a second → open a flagged case → the two documents side
-by side with the labels that differ → the case that we *refused* to decide and why →
-settle it and watch the report change.
-**Rehearse it with the AI switch off.** The whole system runs rules-only and says so.
-Never demo something that needs the network to work.
-*Done when:* you can deliver it start to finish without touching a terminal.
+The repo and the demo **must be public** — that is a submission requirement, so closing
+either is not available to us. It also means the video is worth real marks on its own:
+**one mark is deducted for every 30 seconds over five minutes.**
 
-**B2 · Slides — P1** *(Product & Impact, 30 — the largest single block)*
-The problem, the approach, the numbers, the honest limits. Numbers come from A1/A2 —
-ask for them, do not wait. Include the reliability story: 20 of 520 escalated, zero
-false alarms, and why refusing to answer is a feature.
+The video has a required shape: Intro (team + project) → the Problem (who it affects
+and why) → Tech Stack → Live Demo of the working prototype → Impact (metrics, results).
 
-**B3 · The real inbox — P1** *(Practical Value, 10)*
-The sample data is generated from real Outlook `.msg` files (see `pools.py` in the
-organizers' bundle: real carriers, real ports, real customers). Show the path from here
-to a live inbox: IMAP or Microsoft Graph, `.msg` parsing, what changes and what does
-not. A working `src/ingest/msg.py` that reads one real `.msg` into our `EmailRecord`
-would be strong; a clear slide is enough.
-*Self-contained — new files only, touches nothing that exists.*
+### Where the marks are
 
-**B4 · Fresh-eyes review — P1** *(cheap, high value)*
-You have not seen this code. Read `CLAUDE.md` first — several things in the extractors
-look like bugs and are deliberate, and that section says which. Then poke at
-<https://docmatch.tech> and try to break it. Anything confusing to you is confusing to
-a judge.
+Preliminary, 100 points. Our standing, honestly assessed:
 
-**B5 · Auto-drafted reply — P2** *(Innovation, 10)*
-Given a MISMATCH, draft the email back to the carrier listing the fields to fix. Turns
-the system from a detector into a colleague. New module plus one button on the case
-screen; nothing existing changes.
+| criterion | max | us |
+|---|---|---|
+| Working Core Prototype | **25** | strong — the core flow works end to end, deployed |
+| System Design & Architecture | 15 | strong — needs an architecture diagram in the deck |
+| Technology Integration | 15 | **the AI risk lands here** |
+| Technical Feasibility & Validation | 15 | strong — 197 tests, six unseen datasets, error analysis |
+| Problem Statement Understanding | 10 | strong — needs saying out loud in the deck |
+| Innovation & Solution Approach | 10 | thin — nothing distinctive is *explained* yet |
+| Practical Value & Potential | 10 | needs the real-inbox path and cost numbers |
 
-### Together, at the end
-
-- Run `./scripts/check_robustness.sh` once more after any rule change.
-- One full rehearsal against <https://docmatch.tech>, on a phone, on venue wifi.
-- Confirm `submission.json` from a clean run is what gets handed in.
+"Do not reward the same evidence twice" is in the judges' instructions, so the deck
+should point different evidence at different criteria rather than repeating the score.
 
 ---
 
+## Left — two days, and it is all presentation and proof
+
+The pipeline is finished. **P0 first, then P1. P2 is what gets dropped.**
+
+### Person A — Daniil: make the AI visible and measured
+
+**A0 · Put the key on the server and turn the switch on — P0** *(15 minutes)*
+Right now the demo box says `AI no key`. That single phrase, on a public page, argues
+against a mandatory requirement. Add the key to the server's `.env`, switch AI on, leave
+it on through judging. `LLM_MAX_CALLS` still caps the spend.
+See [OPERATIONS.md](OPERATIONS.md#putting-the-key-on-the-server).
+
+**A1 · Ablation table — P0** *(was P1; the rules promoted it)* *(Technology Integration 15,
+Technical Feasibility 15)*
+Rules-only vs rules+AI vs AI-only, across accuracy, cost and latency. This is what turns
+"AI is a key component" from a claim into a measurement, and it is the same table that
+justifies the architecture. The rules-only column is already measured; the other two need
+the switch on. ~30 calls, under $0.50.
+*Done when:* a three-row table with real numbers, in the deck and the README.
+
+**A2 · What only AI can do — P0** *(Technology Integration, 15)*
+Quantify the part no rule can replace: six image-only scans read by vision, and the
+unfamiliar-layout rescue (`scripts/llm_smoke.py` already proves it reads 7/7 fields from
+a document with no known labels, and correctly takes gross weight over net). Record the
+per-call cost and latency. This is the honest answer to "is the AI load-bearing".
+
+**A3 · Reframe our own materials — P0** *(30 minutes)*
+README and the header currently lead with the absence of AI. Change the story to what it
+actually is: *deterministic where it is provably reliable, AI where it is not, and we
+measured both.* Do not delete the rules-only number — it is a genuine strength — but stop
+leading with it.
+
+**A4 · Housekeeping — P1**
+- Delete the four dead CI variables.
+- **Mirror the repo to GitHub.** The form says "GitHub Repository Link" and we are on
+  GitLab. Probably fine, plausibly not; a mirror costs ten minutes and removes the
+  question.
+- Tell the organizers on Discord that the dataset they supplied contains real staff
+  names, work emails and phone numbers, and that a public repo is mandatory. Their data,
+  their call — but ours to raise, not to quietly decide. See "Data" below.
+
+**A5 · Learning from corrections — P2** *(Innovation, 10)*
+Mine a reviewer's accepted correction into `field_aliases` so the system improves on the
+layouts this customer actually sends. The review loop and provenance already exist.
+
+### Person B — Nikita: the submission itself
+
+Three of the four mandatory components are yours, and none of them exists yet.
+
+**B0 · Demo video — P0** *(mandatory; marks deducted for length)*
+Five minutes maximum, YouTube unlisted or public. Required shape: intro → problem →
+tech stack → live demo → impact. Script it, rehearse it twice, then record.
+The demo spine that works: inbox arrives → 520 triaged in a second → open a flagged case
+→ the two documents side by side with the differing labels → **a scanned BL being read by
+AI vision** → a case we refused to decide, and why → settle it and watch the report change.
+That vision moment is what makes AI visibly a key component. Do not cut it.
+*Done when:* uploaded, link works in an incognito window, under 5:00.
+
+**B1 · Slide deck — P0** *(mandatory; Product & Impact is 30 points)*
+Required sections, named in the rules: **Technical Architecture, Implementation Details,
+Challenges Faced, Future Roadmap.** Numbers come from A1/A2 — ask early, do not wait.
+Include the reliability story: 20 of 520 escalated, zero false alarms, and why refusing
+to answer is a feature rather than a gap.
+
+**B2 · Project description — P1** *(mandatory, short)*
+Name, purpose, problem statement. A paragraph, but it is the first thing a judge reads.
+
+**B3 · The real inbox — P1** *(Practical Value, 10)*
+The sample data is generated from real Outlook `.msg` files. Show the path to a live
+inbox: IMAP or Microsoft Graph, `.msg` parsing, what changes and what does not. A working
+`src/ingest/msg.py` would be strong; a clear slide is enough.
+*Self-contained — new files only.*
+
+**B4 · Fresh-eyes review — P1**
+Read `CLAUDE.md` first: several things in the extractors look like bugs and are
+deliberate, and that section says which. Then try to break <https://docmatch.tech>.
+Anything confusing to you is confusing to a judge.
+
+**B5 · Auto-drafted reply — P2** *(Innovation, 10)*
+Given a MISMATCH, draft the email back to the carrier. Turns a detector into a colleague.
+
+### Together, before noon on the 22nd
+
+- Submit early. The form is [here](https://forms.gle/nnam5eXrf5cjXdf3) and late means not
+  considered.
+- One full rehearsal against <https://docmatch.tech> on a phone, on venue wifi.
+- `./scripts/check_robustness.sh` once more after any rule change.
+- Confirm the video link opens in an incognito window — private videos are not accepted.
+
+---
+
+## Data: something to raise, not to decide alone
+
+The rules say nothing about the supplied dataset — the Data Protection section covers
+participants' own information and resumes, and there is no NDA or confidentiality clause.
+So no rule is being broken.
+
+But the dataset the organizers gave us contains, by their generator's own comment, "real
+names & email patterns": **12 named individuals' corporate email addresses**, 99 direct
+phone numbers, an office address and 20 real customer companies. The domains resolve and
+carry live enterprise mail. All of that is now in a public repository and served by a
+public website — both of which the submission rules **require** to be public.
+
+We cannot fix this by closing either one. Every other team is in the same position with
+the same data, so this is the organizers' decision propagating, not ours. The right move
+is to say so on Discord and let them decide — anonymising is possible (the scoring only
+uses email ids and field names, so fake names would not change a single number) but it
+is their data and their call.
+
 ## Coordination
 
-The only real dependency is **A1/A2 → B2**: Nikita needs the numbers for the slides.
-Get them early on day 4 rather than the night before.
+The only real dependency is **A1/A2 → B1**: Nikita needs the measured numbers for the
+deck and the video. Get them to him on the morning of the 21st, not the night before.
+
+Both P0 lists have to be done by the evening of the 21st, because the 22nd is a half
+day — the deadline is noon.
 
 File ownership, to avoid collisions:
 
 | | files |
 |---|---|
-| A | `scripts/*`, `src/extractor/*`, `deploy/*`, CI, AWS |
-| B | `src/ingest/*` (new), `src/draft.py` (new), slides, demo notes |
+| A | `scripts/*`, `src/extractor/*`, `deploy/*`, `README.md`, CI, AWS |
+| B | `src/ingest/*` (new), `src/draft.py` (new), the deck, the video, the description |
 | shared — say so before you touch | `src/models.py`, `src/pipeline.py`, `CLAUDE.md` |
 
 Branch per person, merge to `main` at the end of each day. Pushing to `main` deploys —
