@@ -1,20 +1,32 @@
 # Production stack: the app behind Caddy, which gets HTTPS by itself.
 #
-#   cp .env.example .env && edit it      # SDOC_DOMAIN, optionally ANTHROPIC_API_KEY
-#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+#   cp .env.example .env && edit it      # SDOC_DOMAIN at minimum
+#   docker compose -f deploy/docker-compose.prod.yml up -d
 #
-# See docs/deploy-aws.md for the full runbook (EC2, security group, DNS).
+# The image is built by CI and pulled from the GitLab registry — a t3.micro has 1 GB of
+# RAM and building pymupdf on it is a coin flip. `build:` is kept so a developer can
+# still `up --build` locally; CI deploys pass --no-build.
+#
+# See docs/deploy-aws.md for the full runbook (EC2, security group, DNS, .tech domain).
 services:
   app:
+    image: ${SDOC_IMAGE:-sdoc-app:local}
     build:
       context: ..
       dockerfile: deploy/Dockerfile
     environment:
-      # Optional. Without it the service runs rules-only and says so on /health —
-      # which is also how you demo safely on a venue's wifi.
+      # The Claude switch. Ships OFF: the rules score 1.0000 on their own, so the budget
+      # is only spent when somebody turns it on from the header of the review screen.
+      # This is only the DEFAULT — the switch, once used, wins and persists.
+      SDOC_LLM: ${SDOC_LLM:-off}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
       LLM_MAX_CALLS: ${LLM_MAX_CALLS:-40}
+      DATA_DIR: ${DATA_DIR:-data}
+      # where the switch is remembered; the volume below keeps it across restarts
+      SDOC_STATE_FILE: /state/sdoc-state.json
+    volumes:
+      - sdoc_state:/state
     expose:
       - "8000"
     restart: unless-stopped
@@ -22,8 +34,10 @@ services:
   caddy:
     image: caddy:2-alpine
     ports:
-      - "80:80"
-      - "443:443"
+      # 80/443 in production. Override on a machine where they are taken:
+      #   HTTP_PORT=8080 HTTPS_PORT=8443 docker compose -f ... up -d
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     environment:
       SDOC_DOMAIN: ${SDOC_DOMAIN:-:80}
     volumes:
@@ -36,6 +50,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  sdoc_state:
   caddy_data:
   caddy_config:
   caddy_logs:
