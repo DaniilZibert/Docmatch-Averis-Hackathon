@@ -111,7 +111,7 @@ hard pin, so a newer Python resolves a wheel instead of trying to build one.
 pip install -r requirements.txt
 cp .env.example .env          # optional: ANTHROPIC_API_KEY for the fallbacks
 
-pytest -q                     # 228 tests — free, offline, no API calls
+pytest -q                     # 234 tests — free, offline, no API calls
 python -m src.pipeline        # 520 emails -> submission.json + a run summary
 uvicorn src.api.main:app --reload    # then open http://localhost:8000
 ```
@@ -139,6 +139,16 @@ counters and the report update immediately and the app moves to the next case.
 Rows blank on one side are deliberately *not* pre-ticked: a missing value is why we
 stopped, not a discrepancy, and the screen should not walk a reviewer into confusing
 the two.
+
+Not every escalation has two documents to show. An email can be flagged before anything
+is read at all — nothing attached, or nothing readable — and those cases get a pane
+naming the two documents we expected, what actually arrived, what to do about it, and a
+link to upload the pair if the reviewer already has it. They close with **Documents
+requested**, which clears the queue but leaves the verdict at `NEEDS_REVIEW` because
+nothing has in fact been checked, or **No check needed**. An open case always offers a
+decision: a screen that asks for review and then presents nothing to review is a dead
+end, and the queue never empties. **Leave open** is a plain link that moves to the next
+case without recording anything.
 
 ### Bring your own documents
 

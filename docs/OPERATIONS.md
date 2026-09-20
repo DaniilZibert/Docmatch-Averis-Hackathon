@@ -47,7 +47,7 @@ three things that quietly bill on AWS (load balancer, NAT gateway, RDS) are all 
 
 ```
 git push origin main
-   └─ test    228 tests, then a real pass over 520 emails, submission validated
+   └─ test    234 tests, then a real pass over 520 emails, submission validated
    └─ build   build the image, prove the container starts, push to the GitLab registry
    └─ deploy  wait until /health reports this commit
                   ↑

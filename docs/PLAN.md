@@ -80,6 +80,11 @@ Rows blank on one side are deliberately **not** pre-ticked as defects: a missing
 is why we stopped, not a discrepancy, and the screen must not walk a reviewer into
 confusing the two.
 
+An escalation without documents — nothing attached, or nothing readable — still shows
+the reviewer what was expected, what arrived and what to do, and still closes. **Every
+open case offers a decision.** A screen that demands review and then shows nothing to
+review is a dead end, and the queue it feeds never empties.
+
 ### Judges can bring their own data
 
 **Upload new data** (`/upload`) takes an SI and a draft BL in any of the four formats
@@ -131,7 +136,7 @@ the pipeline and no credentials held by CI. [OPERATIONS.md](OPERATIONS.md).
 
 ### Validation
 
-228 tests, free and offline. `scripts/evaluate.py` saves each run and diffs two of them
+234 tests, free and offline. `scripts/evaluate.py` saves each run and diffs two of them
 email by email with an error breakdown per scoring axis. `scripts/check_robustness.sh`
 scores against freshly generated inboxes. `scripts/llm_smoke.py` proves the three
 Claude paths work on input the rules cannot handle.
@@ -197,7 +202,7 @@ Preliminary, 100 points. Our standing, honestly assessed:
 | Working Core Prototype | **25** | strong — the core flow works end to end, deployed |
 | System Design & Architecture | 15 | strong — needs an architecture diagram in the deck |
 | Technology Integration | 15 | **the AI risk lands here** |
-| Technical Feasibility & Validation | 15 | strong — 228 tests, six unseen datasets, error analysis |
+| Technical Feasibility & Validation | 15 | strong — 234 tests, six unseen datasets, error analysis |
 | Problem Statement Understanding | 10 | strong — needs saying out loud in the deck |
 | Innovation & Solution Approach | 10 | thin — nothing distinctive is *explained* yet |
 | Practical Value & Potential | 10 | needs the real-inbox path and cost numbers |
@@ -306,9 +311,21 @@ Done, in the repo:
   newer than the pin, so pip tried to build them from source and stopped. Worse,
   `rapidfuzz` is not optional — the bilingual labels resolve only through the fuzzy
   pass, so the install failing takes real capability with it. The three now carry
-  floors. Verified end to end: clean clone on 3.14 installs, 228 tests pass, the
+  floors. Verified end to end: clean clone on 3.14 installs, the suite passes, the
   pipeline runs. The Docker image pins Python instead, which is where reproducibility
   belongs.
+* **Five of the twenty open cases were dead ends.** An email routed to
+  `BL_COMPARISON` with nothing attached is escalated before any document is read, so it
+  has no comparison rows — and the case screen keyed both the table and the buttons off
+  those rows. The reviewer got an empty column under a banner insisting a person was
+  needed, footed with "Nothing to decide on this one". The screen now separates "there
+  are rows to tick" from "this case is open and wants a decision", and a row-less
+  escalation gets its own pane and its own two closures. Found by clicking through the
+  live site, not by a test — worth remembering before the demo.
+* **"Leave open" did the opposite of its label.** It called `resolve()`, and recording a
+  resolution is exactly what removes a case from the open queue, so the button drained
+  the queue one click at a time. It is now a plain link. Both fixes carry regression
+  tests.
 * README states the supported Python and offers Docker as the no-setup path.
 * Secret scan re-run over all 1,104 objects in the history: clean.
 * Confirmed nothing executable still reads the four dead CI variables — the pipeline

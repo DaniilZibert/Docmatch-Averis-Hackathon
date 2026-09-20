@@ -72,18 +72,25 @@ not start by building something that exists — run it first.
 
 ```bash
 pip install -r requirements.txt
-pytest -q                       # 228 tests, no network, no spend
+pytest -q                       # 234 tests, no network, no spend
 python -m src.pipeline          # 520 emails -> submission.json, ~1.3s, no LLM calls
 uvicorn src.api.main:app --reload    # then open http://localhost:8000
 ```
 
-1. **`pytest -q`.** 228 tests. If your change reddens one, the test is usually right.
+1. **`pytest -q`.** 234 tests. If your change reddens one, the test is usually right.
 2. **`./scripts/check_robustness.sh <path to data_v2>`** after any change to the rules.
    The sample inbox is one draw from a generator; this scores you on fresh ones. It is
    what caught a bug that a code review had missed.
 3. **Read §5 before "fixing" anything in the extractors.** Several things there look
    like bugs and are deliberate: the address lines that are ignored, the PDF container
    table that is skipped, the blank tokens that are not values.
+4. **Every open case must offer a decision.** If the pipeline escalated it, a person
+   has been asked to act, so the case screen owes them something to act on — including
+   the escalations that have no documents and therefore no comparison rows. Keying the
+   buttons off `result.comparisons` alone is how five cases came to sit in the queue
+   showing "Nothing to decide on this one". And anything labelled "leave open" must not
+   call `store.resolve()`: recording a resolution is what takes a case *out* of the
+   queue.
 
 ### Layout
 
@@ -114,7 +121,7 @@ scripts/
   check_robustness.sh      score against freshly generated, never-seen inboxes
   llm_smoke.py             prove the Claude paths work (costs a few cents)
   run_self_eval.py         POST submission.json to the organizers' server
-tests/                     228 tests
+tests/                     234 tests
 ```
 
 ### Testing one half without the other
