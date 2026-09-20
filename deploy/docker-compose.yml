@@ -1,5 +1,11 @@
-# OWNER: Person B. Local stack; the same file deploys on the EC2 instance.
-#   docker compose -f deploy/docker-compose.yml up --build
+# The whole service in one container.
+#   docker compose -f deploy/docker-compose.yml up --build   ->  http://localhost:8000
+#
+# Deliberately a single service. The pipeline processes all 520 emails in under a
+# second, so a queue and a database would be moving parts with nothing to move; the
+# API keeps results in memory and src/db/schema.sql records the shape a real
+# deployment persists. Port 8000 so it can run alongside the organizers' self-eval
+# server on 8080.
 services:
   api:
     build:
@@ -8,43 +14,13 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql://sdoc:sdoc@postgres:5432/sdoc
-      REDIS_URL: redis://redis:6379/0
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-5}
-    depends_on:
-      - postgres
-      - redis
+      # optional: without it the service runs rules-only and says so on /health
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-5}
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     restart: unless-stopped
-
-  worker:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-    command: ["rq", "worker", "--url", "redis://redis:6379/0"]
-    environment:
-      DATABASE_URL: postgresql://sdoc:sdoc@postgres:5432/sdoc
-      REDIS_URL: redis://redis:6379/0
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-    depends_on:
-      - redis
-      - postgres
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: sdoc
-      POSTGRES_PASSWORD: sdoc
-      POSTGRES_DB: sdoc
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ../src/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-
-volumes:
-  pgdata:

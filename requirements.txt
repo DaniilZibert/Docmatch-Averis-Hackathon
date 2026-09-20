@@ -2,24 +2,29 @@
 pydantic==2.9.2
 python-dotenv==1.0.1
 
-# --- document extraction (Person A) ---
+# --- document extraction ---
 openpyxl==3.1.5          # .xlsx
 python-docx==1.1.2       # .docx
 pdfplumber==0.11.4       # .pdf text layer
-pymupdf==1.24.10         # .pdf -> image for scanned pages
-rapidfuzz==3.10.0        # fuzzy label matching
+pymupdf==1.24.10         # .pdf -> image for scanned pages (vision fallback)
+rapidfuzz==3.10.0        # fuzzy label matching — REQUIRED, not optional: the
+                         # bilingual Word/Excel labels ("Gross Weight毛重(KGS)")
+                         # resolve only through the fuzzy pass.
 
-# --- LLM (Person A) ---
+# --- LLM fallback (degrades gracefully when absent or unkeyed) ---
 anthropic==0.39.0
 
-# --- service layer (Person B) ---
+# --- service layer ---
 fastapi==0.115.2
 uvicorn[standard]==0.31.1
-jinja2==3.1.4
-sqlalchemy==2.0.35
-psycopg2-binary==2.9.9
-redis==5.1.1
-rq==1.16.2
 
 # --- dev ---
 pytest==8.3.3
+
+# Postgres/Redis are NOT required. The pipeline is a sub-second batch over the whole
+# inbox, so the API keeps results in memory and src/db/schema.sql documents the shape
+# a real deployment would persist. Add these back when runs become incremental:
+#   sqlalchemy==2.0.35
+#   psycopg2-binary==2.9.9
+#   redis==5.1.1
+#   rq==1.16.2

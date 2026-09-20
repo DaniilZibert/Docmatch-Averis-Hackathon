@@ -16,7 +16,7 @@ from pathlib import Path
 from src.models import (COMPARED_FIELDS, Category, ComparisonResult, DecidedBy,
                         DocType, EmailRecord, EmailResult, ExtractedDocument,
                         ReviewReason, Status, build_submission)
-from src.submission import REQUIRED_KEYS, validate_submission
+from src.submission import OPTIONAL_KEYS, REQUIRED_KEYS, validate_submission
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
@@ -54,17 +54,31 @@ def test_missing_document_is_unreadable():
     assert doc.source_path is None
 
 
-def test_submission_entry_has_exactly_the_scorer_keys():
+def test_submission_entry_has_the_scorer_keys():
     result = EmailResult.from_comparison(
         Category.BL_COMPARISON,
         ComparisonResult(email_id="email_1", status=Status.MISMATCH, has_defect=True,
                          defect_fields=["consignee"]),
     )
     entry = result.to_submission_entry()
-    assert set(entry) == REQUIRED_KEYS
+    assert REQUIRED_KEYS <= set(entry)
     assert entry["status"] == "MISMATCH"
     assert entry["defect_fields"] == ["consignee"]
     assert entry["review_reason"] is None
+
+
+def test_submission_entry_carries_decided_by():
+    """The organizers' scorer reads `decided_by` and reports it as `rule_pct`.
+    Dropping it throws away the evidence that our rules carried the inbox."""
+    result = EmailResult.non_comparison("email_1", Category.SPAM, DecidedBy.RULE)
+    assert result.to_submission_entry()["decided_by"] == "rule"
+    assert set(entry_keys := result.to_submission_entry()) == REQUIRED_KEYS | OPTIONAL_KEYS
+    assert "decided_by" in entry_keys
+
+
+def test_plain_submission_matches_the_sample_shape_exactly():
+    result = EmailResult.non_comparison("email_1", Category.SPAM, DecidedBy.RULE)
+    assert set(result.to_submission_entry(include_diagnostics=False)) == REQUIRED_KEYS
 
 
 def test_needs_review_entry_carries_its_reason():
@@ -80,7 +94,7 @@ def test_needs_review_entry_carries_its_reason():
 
 def test_non_comparison_emails_are_clean():
     result = EmailResult.non_comparison("email_1", Category.SPAM, DecidedBy.RULE)
-    entry = result.to_submission_entry()
+    entry = result.to_submission_entry(include_diagnostics=False)
     assert entry == {"category": "SPAM", "status": "OK", "review_reason": None,
                      "defect_fields": [], "has_defect": False}
 
@@ -89,7 +103,7 @@ def test_submission_shape_matches_organizers_sample():
     """Our generated shape must be identical to sample_submission.json, key for key."""
     sample = json.loads((DATA_DIR / "sample_submission.json").read_text())
     results = [EmailResult.non_comparison(eid, Category.GENERAL) for eid in sample]
-    ours = build_submission(results)
+    ours = build_submission(results, include_diagnostics=False)
 
     assert set(ours) == set(sample)
     assert set(next(iter(ours.values()))) == set(next(iter(sample.values())))
@@ -99,3 +113,21 @@ def test_submission_shape_matches_organizers_sample():
 def test_validate_submission_catches_missing_emails():
     problems = validate_submission({"email_001": {k: None for k in REQUIRED_KEYS}}, DATA_DIR)
     assert problems and "missing" in problems[0]
+
+
+def test_validate_submission_rejects_an_unknown_category():
+    """A misspelled category scores as a miss on two axes and nothing says why."""
+    sample = json.loads((DATA_DIR / "sample_submission.json").read_text())
+    bad = {eid: {"category": "BL_COMPARSION",  # typo
+                 "status": "OK", "review_reason": None,
+                 "defect_fields": [], "has_defect": False} for eid in sample}
+    problems = validate_submission(bad, DATA_DIR)
+    assert any("not one of" in p for p in problems)
+
+
+def test_validate_submission_rejects_disagreeing_defect_flags():
+    sample = json.loads((DATA_DIR / "sample_submission.json").read_text())
+    bad = {eid: {"category": "BL_COMPARISON", "status": "MISMATCH", "review_reason": None,
+                 "defect_fields": ["consignee"], "has_defect": False} for eid in sample}
+    problems = validate_submission(bad, DATA_DIR)
+    assert any("the scorer needs both" in p for p in problems)

@@ -1,5 +1,5 @@
 """
-OWNER: Person A.  STUB — implement me first (192 of the 250 attachments are .txt).
+OWNER: Person A.  Plain-text SI / BL — 192 of the 250 attachments.
 
 Shape of a real .txt attachment (data/attachments/email_004_SI.txt):
 
@@ -16,37 +16,48 @@ Shape of a real .txt attachment (data/attachments/email_004_SI.txt):
     Total Containers: 6 x 40'HC
     Gross Wt (kgs): 131,058 KG
 
-So: `Label: Value` one per line, with an optional indented continuation line holding
-the address. The label spelling differs between SI and BL — resolve it through
-field_aliases.match_field(), never by hardcoding a string here.
+`Label: Value` one per line, plus an INDENTED continuation line holding the address.
+Those continuation lines are skipped: the address belongs to whoever the name says it
+belongs to, and the generator copies the address verbatim even when it mutates the
+name — so comparing addresses would mask a real consignee defect.
 
-Note `Total Containers: 6 x 40'HC` -> container_count is 6, and
-`Gross Wt (kgs): 131,058 KG` -> gross_weight_kg is 131058. Use parse_number() from
-src/normalize.py (Person B owns it) so both sides parse numbers the same way.
+The label spelling differs between SI and BL; it is always resolved through
+field_aliases.match_field(), never by hardcoding a string here.
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from ..models import DocType, ExtractedDocument
+from ._common import build_document, unreadable_document
+
+# "Label: value" — the label is short and colon-free by construction.
+LABEL_LINE = re.compile(r"^([^:]{1,60}):\s*(.*)$")
+
+
+def parse_label_lines(text: str) -> list[tuple[str, str]]:
+    """Every `Label: Value` pair in a block of text. Indented continuation lines
+    (addresses) are ignored. Shared with the PDF and DOCX extractors."""
+    pairs: list[tuple[str, str]] = []
+    for line in text.splitlines():
+        if not line.strip() or line[:1].isspace():
+            continue                       # blank line, or an indented address
+        match = LABEL_LINE.match(line)
+        if match:
+            pairs.append((match.group(1), match.group(2)))
+    return pairs
 
 
 def extract_txt(path: Path, email_id: str, doc_type: DocType,
                 source_path: str) -> ExtractedDocument:
-    """TODO(Person A): parse `Label: Value` lines into ExtractedDocument.fields.
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if not text.strip():
+        return unreadable_document(email_id, doc_type, source_path, "file is empty")
 
-    Suggested steps:
-      1. text = path.read_text(encoding="utf-8", errors="replace")
-      2. for each line matching r"^([^:]{1,60}):\\s*(.*)$" -> (label, value)
-      3. field = field_aliases.match_field(label); skip when None
-      4. numeric fields -> normalize.parse_number(value)
-      5. ExtractedField(value=..., confidence=0.95, source=FieldSource.RULE,
-                        raw_label=label)
-      6. if field_aliases.is_foreign_document(all_labels) -> wrong_doc_type=True
-      7. if the file is empty / has no recognisable labels -> unreadable=True
-    """
-    return ExtractedDocument(
-        email_id=email_id, doc_type=doc_type, source_path=source_path,
-        unreadable=True, notes="txt_extractor not implemented yet",
-    )
+    return build_document(parse_label_lines(text), email_id=email_id, doc_type=doc_type,
+                          source_path=source_path, text=text)
+
+
+__all__ = ["LABEL_LINE", "parse_label_lines", "extract_txt"]
