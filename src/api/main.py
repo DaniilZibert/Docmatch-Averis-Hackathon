@@ -63,12 +63,22 @@ app = FastAPI(title="SDOC — shipping document verification", version="1.0.0",
               lifespan=lifespan)
 
 
+class LlmSetting(BaseModel):
+    """The Claude on/off switch."""
+    enabled: bool
+
+
 class ReviewDecision(BaseModel):
     """What a reviewer sends back after looking at a case."""
     status: Status
     defect_fields: list[str] = []
     reviewer: str = "unknown"
     note: str | None = None
+
+
+def _llm() -> dict[str, Any]:
+    from ..extractor.llm_extract import llm_status
+    return llm_status()
 
 
 def _entry(result: EmailResult) -> dict[str, Any]:
@@ -92,18 +102,19 @@ def _entry(result: EmailResult) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 def screen_overview() -> str:
-    return ui.overview(STORE)
+    return ui.overview(STORE, _llm())
 
 
 @app.get("/inbox", response_class=HTMLResponse)
 def screen_inbox(category: str | None = None, status: str | None = None,
                  q: str | None = None, page: int = 1) -> str:
-    return ui.inbox(STORE, category or None, status or None, q or None, page)
+    return ui.inbox(STORE, category or None, status or None, q or None, page,
+                    llm=_llm())
 
 
 @app.get("/review", response_class=HTMLResponse)
 def screen_review() -> str:
-    return ui.review_list(STORE)
+    return ui.review_list(STORE, _llm())
 
 
 @app.get("/case/{email_id}", response_class=HTMLResponse)
@@ -111,12 +122,12 @@ def screen_case(email_id: str, back: str = "/") -> HTMLResponse:
     result = STORE.result(email_id)
     if result is None:
         raise HTTPException(404, f"no result for {email_id}")
-    return HTMLResponse(ui.case(STORE, result, back))
+    return HTMLResponse(ui.case(STORE, result, back, _llm()))
 
 
 @app.get("/report", response_class=HTMLResponse)
 def screen_report() -> str:
-    return ui.report_page(STORE, render_report(STORE.ordered()))
+    return ui.report_page(STORE, render_report(STORE.ordered()), _llm())
 
 
 @app.get("/attachment/{path:path}")
@@ -146,9 +157,29 @@ def favicon() -> Response:
 # ---------------------------------------------------------------------------
 @app.get("/health")
 def health() -> dict[str, Any]:
-    from ..extractor.llm_extract import llm_available
+    llm = _llm()
     return {"status": "ok", "run": STORE.run.as_dict(), **STORE.counts(),
-            "llm": "available" if llm_available() else "rules-only"}
+            "llm": "available" if llm["available"] else "rules-only",
+            "llm_detail": llm}
+
+
+@app.get("/settings/llm")
+def get_llm_setting() -> dict[str, Any]:
+    return _llm()
+
+
+@app.post("/settings/llm")
+def set_llm_setting(setting: LlmSetting) -> dict[str, Any]:
+    """Turn the Claude fallbacks on or off, at runtime, without a redeploy.
+
+    The rules score 1.0000 on the sample inbox without any of this, so the switch is
+    off by default and the budget is only spent when somebody deliberately says so.
+    The setting is written to a state file and survives a restart.
+    """
+    from ..extractor.llm_extract import forget_client
+    config.set_llm_enabled(setting.enabled)
+    forget_client()                 # next call re-reads the switch and the key
+    return _llm()
 
 
 @app.post("/run")

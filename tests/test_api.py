@@ -120,3 +120,22 @@ def test_unknown_email_is_a_404_not_a_crash(client):
     assert client.get("/case/email_999999").status_code == 404
     assert client.get("/results/email_999999").status_code == 404
     assert client.post("/review/email_999999", json={"status": "OK"}).status_code == 404
+
+
+def test_the_llm_switch_is_reachable_from_the_service(client, tmp_path, monkeypatch):
+    """The header switch posts here. Off is the default and must survive being read."""
+    monkeypatch.setenv("SDOC_STATE_FILE", str(tmp_path / "state.json"))
+
+    assert client.get("/settings/llm").json()["enabled"] is False
+
+    on = client.post("/settings/llm", json={"enabled": True}).json()
+    assert on["enabled"] is True
+    assert client.get("/health").json()["llm_detail"]["enabled"] is True
+
+    off = client.post("/settings/llm", json={"enabled": False}).json()
+    assert off["enabled"] is False
+
+
+def test_every_screen_shows_the_switch(client):
+    for path in ["/", "/inbox", "/review", "/report", "/case/email_004"]:
+        assert "toggleLlm" in client.get(path).text, path

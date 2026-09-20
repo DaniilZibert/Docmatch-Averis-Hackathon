@@ -41,8 +41,11 @@ MIN_FIELDS_FOR_RULES = 5
 
 MAX_TOKENS = 1024
 
-# Spend guard. Every call goes through _ask, which stops once the budget is gone.
+# Spend guard. Every call goes through _ask, which stops when the switch is off or the
+# budget is gone. Token counts are kept so a run can report what it actually cost.
 _calls_made = 0
+_tokens_in = 0
+_tokens_out = 0
 _warned_over_budget = False
 
 EXTRACTION_PROMPT = """You are reading one shipping document (a Shipping Instruction or a
@@ -101,6 +104,18 @@ def calls_made() -> int:
     return _calls_made
 
 
+def usage() -> dict:
+    """What this process has spent: calls, tokens, and an estimate in dollars.
+
+    The estimate uses LLM_PRICE_IN / LLM_PRICE_OUT (see config.token_prices). It is a
+    guide for deciding whether to leave the switch on, not an invoice.
+    """
+    price_in, price_out = config.token_prices()
+    cost = (_tokens_in / 1_000_000) * price_in + (_tokens_out / 1_000_000) * price_out
+    return {"calls": _calls_made, "tokens_in": _tokens_in, "tokens_out": _tokens_out,
+            "estimated_usd": round(cost, 4)}
+
+
 def reset_budget() -> None:
     """Start the call budget over — used by long-lived processes like the API."""
     global _calls_made, _warned_over_budget
@@ -117,6 +132,11 @@ def _get_client():
     global _client, _client_failed
     if _client is not None or _client_failed:
         return _client
+
+    if not config.llm_enabled():
+        log.info("the Claude switch is off — running rules-only. Turn it on from the "
+                 "header of the review screen, or set SDOC_LLM=on.")
+        return None
 
     api_key = config.api_key()
     if not api_key:
@@ -146,6 +166,29 @@ def llm_available() -> bool:
     return _get_client() is not None
 
 
+def llm_status() -> dict:
+    """Everything the UI needs to show about the switch and what it has cost."""
+    has_key = bool(config.api_key())
+    enabled = config.llm_enabled()
+    return {
+        "enabled": enabled,
+        "has_key": has_key,
+        "available": enabled and has_key and _get_client() is not None,
+        "source": config.llm_setting_source(),
+        "model": config.model(),
+        "budget": config.max_llm_calls(),
+        **usage(),
+    }
+
+
+def forget_client() -> None:
+    """Drop the cached client so the next call re-reads the switch and the key.
+    Called when the switch is flipped at runtime."""
+    global _client, _client_failed
+    _client = None
+    _client_failed = False
+
+
 def _ask(content, *, max_tokens: int = MAX_TOKENS) -> str | None:
     """One Claude call. Returns the text, or None on any failure or once the budget
     for this process is spent."""
@@ -171,6 +214,11 @@ def _ask(content, *, max_tokens: int = MAX_TOKENS) -> str | None:
             max_tokens=max_tokens,
             messages=[{"role": "user", "content": content}],
         )
+        global _tokens_in, _tokens_out
+        usage_block = getattr(message, "usage", None)
+        if usage_block is not None:
+            _tokens_in += getattr(usage_block, "input_tokens", 0) or 0
+            _tokens_out += getattr(usage_block, "output_tokens", 0) or 0
         return "".join(block.text for block in message.content if block.type == "text")
     except Exception as exc:
         log.warning("Claude call failed (%s: %s) — falling back to escalation.",
@@ -264,5 +312,6 @@ def classify_email(subject: str, body: str) -> Category | None:
 
 
 __all__ = ["MIN_FIELDS_FOR_RULES", "EXTRACTION_PROMPT", "CLASSIFICATION_PROMPT",
-           "COMPARED_FIELDS", "llm_available", "calls_made", "reset_budget",
-           "extract_from_text", "extract_from_image", "classify_email"]
+           "COMPARED_FIELDS", "llm_available", "llm_status", "calls_made", "usage",
+           "reset_budget", "forget_client", "extract_from_text", "extract_from_image",
+           "classify_email"]

@@ -60,6 +60,16 @@ nav a:hover{background:#1d2939;text-decoration:none}
 nav a.on{background:#2a3648;color:#fff}
 .runbox{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:12px}
 .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.llm{display:flex;align-items:center;gap:7px;padding:4px 10px;border-radius:99px;
+ background:#1d2939;font-size:12px;white-space:nowrap}
+.llm.on{background:#05603a}
+.llm b{font-weight:600}
+.sw{width:30px;height:17px;border-radius:99px;background:#475467;position:relative;
+ border:none;padding:0;cursor:pointer;flex:none}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:13px;height:13px;
+ border-radius:50%;background:#fff;transition:left .15s}
+.llm.on .sw{background:#32d583}.llm.on .sw::after{left:15px}
+.spend{opacity:.72;font-variant-numeric:tabular-nums}
 .dot.ready{background:#32d583}.dot.running{background:#fdb022;animation:p 1s infinite}
 .dot.failed{background:#f97066}.dot.idle{background:#667085}
 @keyframes p{50%{opacity:.25}}
@@ -170,6 +180,13 @@ async function decide(id, status, back) {
     box.querySelectorAll('button').forEach(b => b.disabled = false); return; }
   location.href = back || location.pathname + location.search;
 }
+async function toggleLlm(btn) {
+  const on = btn.getAttribute('aria-pressed') === 'true';
+  btn.disabled = true;
+  const r = await fetch('/settings/llm', {method: 'POST',
+    headers: {'Content-Type': 'application/json'}, body: JSON.stringify({enabled: !on})});
+  if (r.ok) { location.reload(); } else { alert('Could not switch: ' + r.status); btn.disabled = false; }
+}
 async function runInbox(btn) {
   btn.disabled = true; btn.textContent = 'Processing…';
   await fetch('/run', {method: 'POST'});
@@ -183,7 +200,33 @@ if (document.body && document.body.dataset.run === 'running') {
 
 
 # ---------------------------------------------------------------------------
-def page(title: str, body: str, *, active: str = "", run=None) -> str:
+def llm_switch(llm: dict | None) -> str:
+    """The Claude on/off switch, in the header of every page.
+
+    Claude costs money and the rules do not need it, so it is off unless somebody turns
+    it on — here, without a redeploy or an ssh session. The switch shows what has been
+    spent since the process started, so "leave it on for the demo" is an informed
+    choice rather than a hopeful one.
+    """
+    if llm is None:
+        return ""
+    if not llm["has_key"]:
+        return ('<span class=llm title="no ANTHROPIC_API_KEY on this machine">'
+                'Claude <b>no key</b></span>')
+    on = llm["enabled"]
+    spend = ""
+    if llm["calls"]:
+        spend = (f'<span class=spend>{llm["calls"]} calls · '
+                 f'${llm["estimated_usd"]:.2f}</span>')
+    return (f'<span class="llm {"on" if on else ""}" '
+            f'title="{e(llm["model"])} · cap {llm["budget"]} calls/run · '
+            f'{e(llm["source"])}">'
+            f'<button class=sw onclick="toggleLlm(this)" aria-pressed="{str(on).lower()}"'
+            f' aria-label="Claude fallbacks"></button>'
+            f'Claude <b>{"on" if on else "off"}</b>{spend}</span>')
+
+
+def page(title: str, body: str, *, active: str = "", run=None, llm=None) -> str:
     status = getattr(run, "status", "idle")
     if status == "running":
         note = "processing the inbox…"
@@ -208,6 +251,7 @@ def page(title: str, body: str, *, active: str = "", run=None) -> str:
   <nav>{link('/', 'Overview', 'overview')}{link('/inbox', 'Inbox', 'inbox')}
        {link('/review', 'Needs review', 'review')}{link('/report', 'Report', 'report')}</nav>
   <div class=runbox><span class="dot {e(status)}"></span><span>{e(note)}</span>
+    {llm_switch(llm)}
     <button class=b-light onclick="runInbox(this)">Re-run</button></div>
 </div></div>
 <main>{body}</main></body></html>"""
@@ -244,7 +288,7 @@ def table(results: Iterable[EmailResult], emails: dict, resolutions: dict,
 
 
 # ---------------------------------------------------------------------------
-def overview(store) -> str:
+def overview(store, llm=None) -> str:
     if not store.ready:
         running = store.run.status == "running"
         return page("Overview", f"""
@@ -255,7 +299,7 @@ checked against the Shipping Instruction it should match.</p>
   {'Processing the inbox — this page will refresh itself.' if running else
    'Nothing processed yet.'}<br><br>
   <button onclick="runInbox(this)" {'disabled' if running else ''}>Process the inbox</button>
-</div></div>""", active="overview", run=store.run)
+</div></div>""", active="overview", run=store.run, llm=llm)
 
     counts = store.counts()
     reviews = store.open_reviews()
@@ -287,11 +331,11 @@ checked against the Shipping Instruction it should match.</p>
 {table(mismatches[:10], store.emails, store.resolutions, NO_MISMATCH)}
 {f'<p class=lede><a href="/inbox?status=MISMATCH">See all {len(mismatches)} →</a></p>'
  if len(mismatches) > 10 else ''}
-""", active="overview", run=store.run)
+""", active="overview", run=store.run, llm=llm)
 
 
 def inbox(store, category: str | None, status: str | None, query: str | None,
-          page_no: int, per_page: int = 60) -> str:
+          page_no: int, per_page: int = 60, llm=None) -> str:
     rows = store.filtered(category, status, query)
     total = len(rows)
     pages = max(1, -(-total // per_page))
@@ -334,10 +378,10 @@ def inbox(store, category: str | None, status: str | None, query: str | None,
 </form>
 {table(window, store.emails, store.resolutions, 'Nothing matches that filter.')}
 {nav}
-""", active="inbox", run=store.run)
+""", active="inbox", run=store.run, llm=llm)
 
 
-def review_list(store) -> str:
+def review_list(store, llm=None) -> str:
     reviews = store.open_reviews()
     settled = [store.results[eid] for eid in sorted(store.resolutions)]
     return page("Needs review", f"""
@@ -346,7 +390,7 @@ def review_list(store) -> str:
 carries the two documents side by side and the reason it stopped.</p>
 {table(reviews, store.emails, store.resolutions, 'Nothing is waiting.')}
 {'<h2>Settled</h2>' + table(settled, store.emails, store.resolutions, '') if settled else ''}
-""", active="review", run=store.run)
+""", active="review", run=store.run, llm=llm)
 
 
 def _email_pane(email: EmailRecord | None) -> str:
@@ -391,7 +435,7 @@ def _comparison_pane(result: EmailResult, actionable: bool) -> str:
             f'<table><thead>{head}</thead><tbody>{"".join(rows)}</tbody></table></div>')
 
 
-def case(store, result: EmailResult, back: str = "/") -> str:
+def case(store, result: EmailResult, back: str = "/", llm=None) -> str:
     email = store.email(result.email_id)
     settled = result.email_id in store.resolutions
     actionable = bool(result.comparisons)
@@ -436,17 +480,17 @@ def case(store, result: EmailResult, back: str = "/") -> str:
   <div>{_comparison_pane(result, actionable)}
     <div class=pane>{provenance}{actions if actions else '<div class=pad><span class=hint>Nothing to decide on this one.</span></div>'}</div>
   </div>
-</div>""", active="", run=store.run)
+</div>""", active="", run=store.run, llm=llm)
 
 
-def report_page(store, markdown: str) -> str:
+def report_page(store, markdown: str, llm=None) -> str:
     return page("Report", f"""
 <h1>Discrepancy report</h1>
 <p class=lede>What to send on: every check that found something, and every case a person
 still has to settle. <a href="/report.md">Download as Markdown</a> ·
 <a href="/submission.json">submission.json</a></p>
 <div class="pane md"><div class=pad>{_markdown(markdown)}</div></div>
-""", active="report", run=store.run)
+""", active="report", run=store.run, llm=llm)
 
 
 def _markdown(text: str) -> str:
@@ -491,4 +535,5 @@ def _inline(text: str) -> str:
     return safe
 
 
-__all__ = ["page", "overview", "inbox", "review_list", "case", "report_page", "CSS", "JS"]
+__all__ = ["page", "llm_switch", "overview", "inbox", "review_list", "case",
+           "report_page", "CSS", "JS"]
