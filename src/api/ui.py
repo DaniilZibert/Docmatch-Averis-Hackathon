@@ -236,7 +236,7 @@ def llm_switch(llm: dict | None) -> str:
         return ""
     if not llm["has_key"]:
         return ('<span class=llm title="no ANTHROPIC_API_KEY on this machine">'
-                'Claude <b>no key</b></span>')
+                'AI <b>no key</b></span>')
     on = llm["enabled"]
     spend = ""
     if llm["calls"]:
@@ -246,8 +246,8 @@ def llm_switch(llm: dict | None) -> str:
             f'title="{e(llm["model"])} · cap {llm["budget"]} calls/run · '
             f'{e(llm["source"])}">'
             f'<button class=sw onclick="toggleLlm(this)" aria-pressed="{str(on).lower()}"'
-            f' aria-label="Claude fallbacks"></button>'
-            f'Claude <b>{"on" if on else "off"}</b>{spend}</span>')
+            f' aria-label="AI fallbacks"></button>'
+            f'AI <b>{"on" if on else "off"}</b>{spend}</span>')
 
 
 def page(title: str, body: str, *, active: str = "", run=None, llm=None) -> str:
