@@ -225,6 +225,21 @@ def _recover_collision(text: str, alias: str) -> tuple[str, str] | None:
 
     tail = alias[shared:]            # the part of the label that got mixed in
     mangled = text[shared:]
+
+    # Separate by CASE first. Document values are rendered upper-case while the label
+    # tail is lower-case ("...Consignee" + "ORIENT LINKS CO (LLC)" interleaves to
+    # "ConsOigRnIEeNeT LINKS CO (LLC)"), so the lower-case glyphs ARE the label. This
+    # is exact where subtracting greedily is not: a value like ORIENT contains i/e/n
+    # itself, and a greedy pass happily spends the tail on the value's own letters.
+    if tail.islower():
+        label_chars = [c for c in mangled if c.islower()]
+        if "".join(label_chars) == tail:
+            value = "".join(c for c in mangled if not c.islower()).strip()
+            if value:
+                return text[:shared] + tail, value
+
+    # Fall back to subtracting the tail left to right, for a label/value pair whose
+    # casing does not split cleanly.
     recovered: list[str] = []
     ti = 0
     for ch in mangled:

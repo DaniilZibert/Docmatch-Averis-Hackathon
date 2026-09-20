@@ -108,9 +108,35 @@ def test_pdf_colon_less_labels_are_split():
 
 def test_pdf_collided_label_is_recovered():
     """A long label overruns the value column and the text layer interleaves them:
-    'Notify Party/Intermediate ConsCigEnReIEeX'. The label tail is subtracted back out."""
+    'Notify Party/Intermediate ConsCigEnReIEeX'. Case separates the two runs."""
     document = read("email_208_SI.pdf")
-    assert (document.value_of("notify_party") or "").upper() == "CERIEX"
+    assert document.value_of("notify_party") == "CERIEX"
+
+
+@pytest.mark.parametrize("line,expected", [
+    ("Notify Party/Intermediate ConsCigEnReIEeX", "CERIEX"),
+    ("Notify Party/Intermediate ConsKiTgPne CeO., LTD", "KTP CO., LTD"),
+    ("Notify Party/Intermediate ConsNigAnGeAePPA EXPORTS", "NAGAPPA EXPORTS"),
+    # found by running against a freshly generated dataset: subtracting the label tail
+    # greedily breaks here, because ORIENT contains i/e/n itself and the greedy pass
+    # spends the tail on the value's own letters. Case is the reliable separator.
+    ("Notify Party/Intermediate ConsOigRnIEeNeT LINKS CO (LLC)", "ORIENT LINKS CO (LLC)"),
+])
+def test_every_known_glyph_collision_recovers(line: str, expected: str):
+    from src.extractor.field_aliases import match_label_prefix
+    assert match_label_prefix(line) == ("Notify Party/Intermediate Consignee", expected)
+
+
+@pytest.mark.parametrize("line,label,value", [
+    ("Notify Party PACIFIC OFFICE (M) SDN BHD", "Notify Party", "PACIFIC OFFICE (M) SDN BHD"),
+    ("Notify CERIEX", "Notify", "CERIEX"),
+    ("To the Order of EAST BRIGHT FZ-LLC", "To the Order of", "EAST BRIGHT FZ-LLC"),
+    ("POL BUATAN, INDONESIA", "POL", "BUATAN, INDONESIA"),
+])
+def test_uncollided_lines_still_split_normally(line: str, label: str, value: str):
+    """The recovery must never fire on a line that was never collided."""
+    from src.extractor.field_aliases import match_label_prefix
+    assert match_label_prefix(line) == (label, value)
 
 
 @pytest.mark.parametrize("name", ["email_512_SI.pdf", "email_511_BL.pdf"])
