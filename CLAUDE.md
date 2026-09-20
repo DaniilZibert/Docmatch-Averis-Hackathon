@@ -1,10 +1,18 @@
 # CLAUDE.md — read this first
 
-Instructions for any Claude session working in this repository. Two people work here in
-parallel, each with their own Claude, so this file is the shared brain: what the project
-is, what is already done, who owns which files, and the rules.
+Instructions for anyone, human or Claude, working on this code. **What the project is,
+the rules, and every trap in the data.**
 
-Hackathon runs **18–22 September**. Team repo: `gitlab.com/daniilz2018/averis-hackaton`.
+Three other documents, and they do not overlap with this one:
+
+| | |
+|---|---|
+| [README.md](README.md) | what the thing is and how to run it |
+| [docs/PLAN.md](docs/PLAN.md) | what is done, what is left, who does which |
+| [docs/OPERATIONS.md](docs/OPERATIONS.md) | the server, the domain, CI/CD, the AI switch |
+
+Hackathon **18–22 September**. Repo: `gitlab.com/daniilz2018/averis-hackaton`.
+Live: <https://docmatch.tech>.
 
 ---
 
@@ -57,96 +65,81 @@ Output goes to `submission.json`, keyed by `email_id`, in the shape of
 
 ---
 
-## 3. Current state — the pipeline is complete and scores 1.0000
+## 3. Before you change anything
+
+The pipeline is complete and scores 1.0000. Nothing is waiting to be implemented, so do
+not start by building something that exists — run it first.
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env            # optional; see below
 pytest -q                       # 197 tests, no network, no spend
-python -m src.pipeline          # 520 emails -> submission.json, ~1s, no LLM calls
+python -m src.pipeline          # 520 emails -> submission.json, ~1.3s, no LLM calls
+uvicorn src.api.main:app --reload    # then open http://localhost:8000
 ```
 
-Against the organizers' scorer (`score_cli.py`), rules-only, zero API calls:
+1. **`pytest -q`.** 197 tests. If your change reddens one, the test is usually right.
+2. **`./scripts/check_robustness.sh <path to data_v2>`** after any change to the rules.
+   The sample inbox is one draw from a generator; this scores you on fresh ones. It is
+   what caught a bug that a code review had missed.
+3. **Read §5 before "fixing" anything in the extractors.** Several things there look
+   like bugs and are deliberate: the address lines that are ignored, the PDF container
+   table that is skipped, the blank tokens that are not values.
+
+### Layout
 
 ```
-stage1 macro-F1      1.0000    (30% of the final score)
-stage3 defect-F1     1.0000    (20%)
-end-to-end           1.0000    (50%)   46/46 defect emails caught
-escalation           recall 1.000 / precision 1.000   (flagged 20, gold 20)
-resolved by rules    100%
-FINAL SCORE          1.0000
-```
-
-**And 1.0000 on data it has never seen.** The judges may score us on a different draw,
-so the same pipeline was run against six freshly generated inboxes (`--seed` 3, 7, 42,
-1234, 20260920, 99999 — 1,590 emails in total): 1.0000 on every one, every defect caught
-with the exact field set, 20/20 escalations with no false alarms. Reproduce it with
-`./scripts/check_robustness.sh <path to data_v2>`. That exercise is what found the
-case-collision bug fixed in field_aliases — run it after any change to the rules.
-
-### The Claude switch and the API key
-
-**Claude is OFF by default and nothing spends until somebody turns it on.** The rules
-score 1.0000 without a single call, so the expensive path is the one you have to ask
-for. Four layers, and they are deliberately redundant:
-
-  * **the switch** in the header of every screen — one click, no redeploy, no ssh. It
-    shows the calls made and the running cost while it is on, and is remembered across
-    restarts (the `sdoc_state` volume in production). `POST /settings/llm` is the same
-    thing for scripts.
-  * **`SDOC_LLM=on|off`** sets the default a process starts with. The switch overrides it.
-  * **`LLM_MAX_CALLS`** (default 40) caps calls per run whatever the switch says. The
-    rules resolve the sample inbox alone, so a run that reaches the cap is a run against
-    unfamiliar data. `python -m src.pipeline` prints the calls it made.
-  * **`tests/conftest.py`** disables the LLM for the whole pytest session, and CI pins
-    it off again. Tests must stay free, offline and deterministic — keep it that way.
-
-`.env` holds the team key and is gitignored: it stays on our machines and on the server,
-never in git. `src/config.py` loads it; nothing else reads `os.environ`.
-
-`python scripts/llm_smoke.py` proves the three Claude paths work, on invented input the
-rules cannot handle. ~4 calls, a few cents. Run it before a demo — and remember to turn
-the switch on first, or it will correctly refuse to call anything.
-
-```
-CLAUDE.md                  this file
-README.md
-data/                      the participant bundle (520 emails, 250 attachments)
-docs/use-case.pdf          the original problem statement
 src/
-  models.py                ✅ THE CONTRACT
-  pipeline.py              ✅ classify -> extract -> compare -> submission.json
-  submission.py            ✅ assembly + shape AND value validation
-  classifier.py            ✅ template rules + Claude fallback + expects_attachments()
-  normalize.py             ✅ blanks, numbers, conservative text matching
-  comparator.py            ✅ the 5-step decision order
-  report.py                ✅ the discrepancy report (the use case's deliverable)
-  config.py                ✅ .env loading, model, call budget — the only env reader
+  models.py                THE CONTRACT — changing it affects both work streams
+  pipeline.py              classify -> extract -> compare -> submission.json
+  config.py                .env, the AI switch, the call budget — the only env reader
+  classifier.py            template rules + Claude fallback + expects_attachments()
+  normalize.py             blanks, numbers, conservative text matching
+  comparator.py            the five-step decision order
+  report.py                the discrepancy report
+  submission.py            assembly + shape and value validation
   extractor/
-    __init__.py            ✅ dispatcher by file extension
-    _common.py             ✅ pairs -> ExtractedDocument + the rules->Claude handoff
-    field_aliases.py       ✅ labels, doc-type detection, glyph-collision recovery
-    txt_extractor.py       ✅ 192 files
-    xlsx_extractor.py      ✅ 22 files
-    docx_extractor.py      ✅ 8 files
-    pdf_extractor.py       ✅ 28 files: text layer, container table, vision fallback
-    llm_extract.py         ✅ Claude text/vision/classify — returns None, never raises
-  db/schema.sql            ✅ the shape a real deployment persists
-  api/main.py              ✅ routes: 4 screens + the JSON API
-  api/store.py             ✅ state + the run, started automatically on boot
-  api/ui.py                ✅ the screens (server-rendered, no build step)
+    _common.py             pairs -> ExtractedDocument, and the rules->Claude handoff
+    field_aliases.py       labels, document-type detection, glyph-collision recovery
+    txt/xlsx/docx/pdf_extractor.py     one per format
+    llm_extract.py         Claude text/vision/classify — returns None, never raises
+  api/
+    main.py                routes: four screens + the JSON API
+    store.py               state + the run, started automatically on boot
+    ui.py                  the screens, server-rendered, no build step
 scripts/
-  run_self_eval.py         ✅ POST submission.json to the organizers' server
-  evaluate.py              ✅ score, save a run, diff two runs, error analysis
-  llm_smoke.py             ✅ prove the Claude paths work (costs a few cents)
-  check_robustness.sh      ✅ score against freshly generated, never-seen inboxes
-docs/deploy-aws.md         ✅ runbook: EC2 + .tech domain + HTTPS + CI/CD variables
-deploy/                    ✅ Dockerfile, local compose, prod compose + Caddy
-.gitlab-ci.yml             ✅ test -> build image -> deploy to the server
-tests/                     ✅ 197 tests, contract + every stage + API + the switch
+  evaluate.py              score a run, save it, diff two runs, error analysis
+  check_robustness.sh      score against freshly generated, never-seen inboxes
+  llm_smoke.py             prove the Claude paths work (costs a few cents)
+  run_self_eval.py         POST submission.json to the organizers' server
+tests/                     197 tests
 ```
 
-Remaining work is judge-facing, not pipeline: see §8.
+### Testing one half without the other
+
+```python
+from src.models import ExtractedDocument, DocType
+from src.comparator import compare
+si = ExtractedDocument.fake("email_1", DocType.SI, container_count=3)
+bl = ExtractedDocument.fake("email_1", DocType.BL, container_count=4)
+compare(si, bl)   # MISMATCH, defect_fields == ["container_count"]
+```
+
+### Running against a different inbox
+
+One variable, no code change:
+
+```bash
+python -m src.pipeline --data-dir /path/to/new-inbox
+DATA_DIR=/path/to/new-inbox uvicorn src.api.main:app
+```
+
+The folder needs `inbox/email_*.json` and `attachments/` shaped like `data/`.
+
+### The API key is not in the repo
+
+`.env` is gitignored and stays that way. Ask the other person for the key and put it in
+your own `.env` (copy `.env.example`). Without it everything still runs — rules only,
+with `AI no key` in the header — so a missing key is never why something is broken.
 
 ---
 
@@ -251,131 +244,21 @@ on the scoreboard.
 
 ---
 
-## 6. Who owns what — READ THIS IF YOU ARE PICKING THIS UP
+## 6. Who does what
 
-The original split was Person A on classification and extraction, Person B on
-comparison, service and infrastructure. **Both halves are now written.** Nothing is
-waiting to be implemented, so do not start by building something that already exists —
-run it first (`pytest -q`, then `uvicorn src.api.main:app --reload`) and see what is
-there.
-
-The files are still organised the same way and the split still works for dividing new
-work:
-
-**"the brains"**: `src/classifier.py`, `src/extractor/*`
-**"the body"**: `src/normalize.py`, `src/comparator.py`, `src/submission.py`,
-`src/report.py`, `src/db/*`, `src/api/*`, `deploy/*`, `scripts/*`
-**shared — touch deliberately**: `src/models.py`, `src/pipeline.py`, this file
-
-### Before you change anything
-
-1. `pytest -q` — 197 tests. If they are green, the thing works; if your change reddens
-   one, the test is usually right and the change is usually wrong.
-2. `./scripts/check_robustness.sh <path to data_v2>` after any change to the rules. The
-   sample inbox is one draw from a generator; this scores you on fresh ones. It is what
-   caught the collision bug that a code review had missed.
-3. Read §5 before "fixing" anything in the extractors. Several things there look like
-   bugs and are not: the address lines that are deliberately ignored, the PDF container
-   table that is deliberately skipped, the blank tokens that are deliberately not
-   values.
-
-### Testing one half without the other
-
-```python
-from src.models import ExtractedDocument, DocType
-from src.comparator import compare
-si = ExtractedDocument.fake("email_1", DocType.SI, container_count=3)
-bl = ExtractedDocument.fake("email_1", DocType.BL, container_count=4)
-compare(si, bl)   # MISMATCH, defect_fields == ["container_count"]
-```
-
-### Running against a different inbox
-
-One variable, everywhere — no code change:
-
-```bash
-python -m src.pipeline --data-dir /path/to/new-inbox
-DATA_DIR=/path/to/new-inbox uvicorn src.api.main:app        # the service and screens
-```
-
-The folder needs `inbox/email_*.json` and `attachments/` in the shape `data/` has.
-
-### The API key is not in the repo
-
-`.env` is gitignored and stays out of git deliberately. Ask the other person for the
-key and put it in your own `.env` (copy `.env.example`). Without it everything still
-runs — rules only, with `"llm": "rules-only"` on `/health` — so a missing key is never
-the reason something is broken.
+See **[docs/PLAN.md](docs/PLAN.md)** — it has the current split, the priorities and the
+file ownership. In short: Person A is Daniil, Person B is Nikita, the remaining work is
+all rubric work rather than pipeline work.
 
 ---
 
-## 7. Commands
+## 7. Git workflow
+
+Branch per person, merge into `main` at the end of each day. **Pushing to `main`
+deploys to <https://docmatch.tech>** — the tests gate it, but it does go live.
 
 ```bash
-pip install -r requirements.txt
-
-pytest -q                             # 153 tests — keep green
-python -m src.pipeline                # full run -> submission.json + summary
-python -m src.pipeline --limit 20     # quick pass while developing
-python -m src.pipeline --report out/report.md    # + the discrepancy report
-python -m src.pipeline --plain-submission        # drop decided_by, exact sample shape
-
-uvicorn src.api.main:app --reload     # then open http://localhost:8000
-                                      # it processes the inbox itself — no command needed
-
-docker compose -f deploy/docker-compose.prod.yml up -d --build   # on a server, with HTTPS
-
-# measurement — the answer key lives OUTSIDE this repo
-python scripts/evaluate.py --ground-truth /path/to/ground_truth.json
-python scripts/evaluate.py --server http://localhost:8080       # organizers' docker
-python scripts/evaluate.py --ground-truth <key> --save out/runs/today.json
-python scripts/evaluate.py --compare out/runs/a.json out/runs/b.json
-
-# will it hold on data we have never seen? (rules only, free)
-./scripts/check_robustness.sh /path/to/data_v2
-
-# are the Claude paths alive? (~4 calls, a few cents)
-python scripts/llm_smoke.py
-python scripts/llm_smoke.py --vision      # + one scanned page
-```
-
----
-
-## 8. What is left, in priority order
-
-The pipeline is done. These are rubric lines, not accuracy:
-
-1. **Technical Feasibility & Validation (15).** `evaluate.py` saves and diffs runs and
-   `check_robustness.sh` proves the six-seed result above. Still to do is the ablation
-   table — rules-only vs rules+LLM vs LLM-only across accuracy, cost and latency. That
-   table is the argument for the design; the rules-only column is already measured.
-2. **Technology Integration (15).** All three Claude paths are verified working with a
-   real key (turn the switch on first): classification of emails outside our templates, extraction from a layout
-   with no aliases at all (7/7 fields, and it took the gross weight rather than the net
-   one), and vision on the image-only scans. What is missing is the cost and latency
-   numbers next to them.
-3. **Innovation (10).** What is distinctive here and should be said out loud:
-   confidence-gated escalation, the glyph de-interleaving, provenance on every value
-   (`raw_label` + `source` + `confidence`), and the review screen feeding corrections
-   back. Still unbuilt: mining a human's correction into a new alias so the system
-   learns, and auto-drafting the reply to the carrier.
-4. **Practical Value (10).** The service is deployable (`docs/deploy-aws.md`) — put it
-   on a real URL before judging and walk it on a phone. Still to sketch: the real inbox
-   is Outlook `.msg`, so show the ingest path (IMAP / Graph API + `.msg` parsing) and
-   put throughput and cost per 1000 emails on a slide.
-5. **Demo.** Three-minute script, and rehearse it with `ANTHROPIC_API_KEY` unset — the
-   whole system runs rules-only and says so on `/health`. Never demo something that
-   needs the network to work.
-
----
-
-## 9. Git workflow
-
-Branch per work stream, merge into `main` at the end of each day.
-
-```bash
-git checkout -b feature/pipeline-core     # Person A
-git checkout -b feature/service-infra     # Person B
+git checkout -b feature/<what-you-are-doing>
 ```
 
 Commit in small pieces with a message that says what changed and why. If you touched
