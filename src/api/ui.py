@@ -164,6 +164,28 @@ a.att:hover{background:#dbeafe;text-decoration:none}
 """
 
 JS = """
+// The endpoints that cost money need an admin token (see require_admin in api/main.py).
+// Ask for it once, keep it in this browser, drop it if the server rejects it.
+function adminToken(force) {
+  let t = force ? null : localStorage.getItem('sdoc_admin');
+  if (!t) {
+    t = prompt('Admin token (leave blank if this server has none):') || '';
+    localStorage.setItem('sdoc_admin', t);
+  }
+  return t;
+}
+async function adminPost(path, body) {
+  let r = await fetch(path, {method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-Admin-Token': adminToken(false)},
+    body: body ? JSON.stringify(body) : null});
+  if (r.status === 401) {                       // wrong or stale token — ask again once
+    r = await fetch(path, {method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-Admin-Token': adminToken(true)},
+      body: body ? JSON.stringify(body) : null});
+  }
+  return r;
+}
+
 async function decide(id, status, back) {
   const box = document.getElementById('case-' + id);
   const fields = status === 'MISMATCH'
@@ -173,6 +195,7 @@ async function decide(id, status, back) {
     return;
   }
   box.querySelectorAll('button').forEach(b => b.disabled = true);
+  // settling a case costs nothing, so it needs no token
   const r = await fetch('/review/' + id, {method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({status: status, defect_fields: fields, reviewer: 'reviewer'})});
@@ -180,16 +203,26 @@ async function decide(id, status, back) {
     box.querySelectorAll('button').forEach(b => b.disabled = false); return; }
   location.href = back || location.pathname + location.search;
 }
+
 async function toggleLlm(btn) {
   const on = btn.getAttribute('aria-pressed') === 'true';
   btn.disabled = true;
-  const r = await fetch('/settings/llm', {method: 'POST',
-    headers: {'Content-Type': 'application/json'}, body: JSON.stringify({enabled: !on})});
-  if (r.ok) { location.reload(); } else { alert('Could not switch: ' + r.status); btn.disabled = false; }
+  const r = await adminPost('/settings/llm', {enabled: !on});
+  if (r.ok) { location.reload(); }
+  else {
+    alert(r.status === 401 ? 'That admin token was not accepted.'
+                           : 'Could not switch: ' + r.status);
+    btn.disabled = false;
+  }
 }
+
 async function runInbox(btn) {
   btn.disabled = true; btn.textContent = 'Processing…';
-  try { await fetch('/run', {method: 'POST'}); } catch (e) {}
+  const r = await adminPost('/run', null);
+  if (r.status === 401) { alert('That admin token was not accepted.');
+    btn.disabled = false; btn.textContent = 'Re-run'; return; }
+  if (r.status === 429) { alert('A run just started — give it a moment.');
+    btn.disabled = false; btn.textContent = 'Re-run'; return; }
   location.reload();                       // comes back with data-run="running"
 }
 

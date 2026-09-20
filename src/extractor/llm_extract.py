@@ -105,15 +105,19 @@ def calls_made() -> int:
 
 
 def usage() -> dict:
-    """What this process has spent: calls, tokens, and an estimate in dollars.
+    """What has been spent: this process, and cumulatively across all of them.
 
     The estimate uses LLM_PRICE_IN / LLM_PRICE_OUT (see config.token_prices). It is a
     guide for deciding whether to leave the switch on, not an invoice.
     """
     price_in, price_out = config.token_prices()
     cost = (_tokens_in / 1_000_000) * price_in + (_tokens_out / 1_000_000) * price_out
+    total = config.spent()
     return {"calls": _calls_made, "tokens_in": _tokens_in, "tokens_out": _tokens_out,
-            "estimated_usd": round(cost, 4)}
+            "estimated_usd": round(cost, 4),
+            "total_calls": total["calls"], "total_usd": total["usd"],
+            "cap_usd": config.spend_cap_usd(),
+            "cap_reached": config.cap_reached()}
 
 
 def reset_budget() -> None:
@@ -169,7 +173,7 @@ def llm_available() -> bool:
 def llm_status() -> dict:
     """Everything the UI needs to show about the switch and what it has cost."""
     has_key = bool(config.api_key())
-    enabled = config.llm_enabled()
+    enabled = config.llm_enabled()          # already false once the cap is reached
     return {
         "enabled": enabled,
         "has_key": has_key,
@@ -217,8 +221,22 @@ def _ask(content, *, max_tokens: int = MAX_TOKENS) -> str | None:
         global _tokens_in, _tokens_out
         usage_block = getattr(message, "usage", None)
         if usage_block is not None:
-            _tokens_in += getattr(usage_block, "input_tokens", 0) or 0
-            _tokens_out += getattr(usage_block, "output_tokens", 0) or 0
+            tin = getattr(usage_block, "input_tokens", 0) or 0
+            tout = getattr(usage_block, "output_tokens", 0) or 0
+            _tokens_in += tin
+            _tokens_out += tout
+            # Write it to the persistent ledger immediately, not at the end of the run.
+            # A process that is killed mid-run still spent the money, and a ledger that
+            # only updates on a clean exit is a ledger that undercounts exactly when it
+            # matters.
+            price_in, price_out = config.token_prices()
+            cost = (tin / 1_000_000) * price_in + (tout / 1_000_000) * price_out
+            total = config.record_spend(1, cost)
+            if total["usd"] >= config.spend_cap_usd():
+                log.warning("cumulative spend cap of $%.2f reached ($%.2f over %d calls) "
+                            "— the AI has switched itself off and will stay off until "
+                            "somebody raises LLM_SPEND_CAP_USD or clears the ledger.",
+                            config.spend_cap_usd(), total["usd"], total["calls"])
         return "".join(block.text for block in message.content if block.type == "text")
     except Exception as exc:
         log.warning("Claude call failed (%s: %s) — falling back to escalation.",

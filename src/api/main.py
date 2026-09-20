@@ -27,12 +27,13 @@ JSON / integration
 
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 from typing import Any
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Response
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
                                PlainTextResponse)
 
@@ -74,6 +75,41 @@ class ReviewDecision(BaseModel):
     defect_fields: list[str] = []
     reviewer: str = "unknown"
     note: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Guarding the endpoints that cost money
+# ---------------------------------------------------------------------------
+# The screens stay open to everyone — the submission rules require the prototype to be
+# publicly accessible, and a judge should not need a password to look at it. But two
+# endpoints are not "looking":
+#
+#   POST /run           with the AI on, one call costs six vision requests. It is also
+#                       unauthenticated by nature of being a button, so a loop against
+#                       it empties the budget in about a minute. Worse, each run resets
+#                       the per-run LLM_MAX_CALLS counter, so that cap protects nothing
+#                       here — the cumulative ledger in config.py is what does.
+#   POST /settings/llm  otherwise anyone can switch the spending on.
+#
+# POST /review/{id} is deliberately left open: it costs nothing, and being able to
+# settle a case is the point of the product. The worst a stranger can do is mark a case
+# resolved, which the next run undoes.
+_MIN_SECONDS_BETWEEN_RUNS = 20
+_last_run_at = 0.0
+
+
+def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
+    """Allow the request only if it carries the admin token.
+
+    With SDOC_ADMIN_TOKEN unset the controls are open, which is what you want on a
+    laptop. Set it on any host that has an API key and a public address.
+    """
+    expected = config.admin_token()
+    if not expected:
+        return
+    if x_admin_token != expected:
+        raise HTTPException(401, "this endpoint needs the admin token "
+                                 "(send it as the X-Admin-Token header)")
 
 
 def _llm() -> dict[str, Any]:
@@ -169,7 +205,7 @@ def get_llm_setting() -> dict[str, Any]:
     return _llm()
 
 
-@app.post("/settings/llm")
+@app.post("/settings/llm", dependencies=[Depends(require_admin)])
 def set_llm_setting(setting: LlmSetting) -> dict[str, Any]:
     """Turn the Claude fallbacks on or off, at runtime, without a redeploy.
 
@@ -183,9 +219,15 @@ def set_llm_setting(setting: LlmSetting) -> dict[str, Any]:
     return _llm()
 
 
-@app.post("/run")
+@app.post("/run", dependencies=[Depends(require_admin)])
 def run_pipeline(limit: int | None = None) -> dict[str, Any]:
     """Process the inbox again. Returns immediately; poll /health for progress."""
+    global _last_run_at
+    waited = time.time() - _last_run_at
+    if waited < _MIN_SECONDS_BETWEEN_RUNS:
+        raise HTTPException(429, f"a run was started {waited:.0f}s ago; "
+                                 f"wait {_MIN_SECONDS_BETWEEN_RUNS - waited:.0f}s more")
+    _last_run_at = time.time()
     started = STORE.start_run(DATA_DIR, limit)
     return {"started": started, "run": STORE.run.as_dict()}
 

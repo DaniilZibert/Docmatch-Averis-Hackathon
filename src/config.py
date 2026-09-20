@@ -84,8 +84,58 @@ def _read_state() -> dict:
         return {}
 
 
+def admin_token() -> str:
+    """Shared secret for the endpoints that cost money or reset state.
+
+    Empty means the controls are open — fine locally, not fine on a public URL with a
+    funded key behind it. See require_admin() in api/main.py.
+    """
+    return os.environ.get("SDOC_ADMIN_TOKEN", "").strip()
+
+
+def spend_cap_usd() -> float:
+    """Hard ceiling on estimated spend, across restarts and runs.
+
+    LLM_MAX_CALLS caps a single run, and store._run() resets it every time — so on its
+    own it is no protection at all against someone calling /run in a loop. This cap is
+    cumulative and persisted, and when it is reached the AI switches itself off and
+    stays off until a human raises the ceiling.
+    """
+    try:
+        return float(os.environ.get("LLM_SPEND_CAP_USD", "2.50"))
+    except ValueError:
+        return 2.50
+
+
+def spent() -> dict:
+    """Cumulative spend recorded in the state file: {calls, usd}."""
+    state = _read_state()
+    return {"calls": int(state.get("total_calls", 0)),
+            "usd": round(float(state.get("total_usd", 0.0)), 4)}
+
+
+def record_spend(calls: int, usd: float) -> dict:
+    """Add to the persistent ledger and return the new total."""
+    with _state_lock:
+        state = _read_state()
+        state["total_calls"] = int(state.get("total_calls", 0)) + calls
+        state["total_usd"] = float(state.get("total_usd", 0.0)) + usd
+        _write_state(state)
+        return {"calls": state["total_calls"], "usd": round(state["total_usd"], 4)}
+
+
+def cap_reached() -> bool:
+    return spent()["usd"] >= spend_cap_usd()
+
+
 def llm_enabled() -> bool:
-    """Is Claude allowed to be called at all right now?"""
+    """Is Claude allowed to be called at all right now?
+
+    The cumulative spend cap overrides everything, including a human having switched it
+    on: a budget is a budget whatever anybody clicked.
+    """
+    if cap_reached():
+        return False
     state = _read_state()
     if "llm_enabled" in state:
         return bool(state["llm_enabled"])
@@ -94,6 +144,8 @@ def llm_enabled() -> bool:
 
 def llm_setting_source() -> str:
     """Where the current value came from — shown in the UI so nobody wonders."""
+    if cap_reached():
+        return f"spend cap of ${spend_cap_usd():.2f} reached"
     if "llm_enabled" in _read_state():
         return "switched here"
     if os.environ.get("SDOC_LLM"):
@@ -101,15 +153,20 @@ def llm_setting_source() -> str:
     return "default (off)"
 
 
+def _write_state(state: dict) -> None:
+    """Persist the state file. Caller holds _state_lock."""
+    path = state_file()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+
 def set_llm_enabled(enabled: bool) -> bool:
     """Flip the switch and remember it. Returns the new value."""
     with _state_lock:
         state = _read_state()
         state["llm_enabled"] = bool(enabled)
-        path = state_file()
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+            _write_state(state)
         except OSError as exc:
             # A read-only or wrong-owned path is not a reason to fail the request, but
             # it MUST be loud: the switch then only lasts until the process restarts,
@@ -121,6 +178,18 @@ def set_llm_enabled(enabled: bool) -> bool:
                 path, exc)
             os.environ["SDOC_LLM"] = "on" if enabled else "off"
     return bool(enabled)
+
+
+def reset_spend() -> None:
+    """Clear the ledger. Only for a deliberate "I am raising the budget" moment."""
+    with _state_lock:
+        state = _read_state()
+        state.pop("total_calls", None)
+        state.pop("total_usd", None)
+        try:
+            _write_state(state)
+        except OSError:
+            pass
 
 
 # Rough per-million-token prices, used only to show what a run cost. Override when the
@@ -175,5 +244,6 @@ def data_dir() -> str:
 
 
 __all__ = ["PROJECT_ROOT", "api_key", "model", "max_llm_calls", "data_dir",
-           "version", "state_file", "llm_enabled", "llm_setting_source", "set_llm_enabled",
-           "token_prices"]
+           "version", "state_file", "llm_enabled", "llm_setting_source",
+           "set_llm_enabled", "token_prices", "admin_token", "spend_cap_usd",
+           "spent", "record_spend", "cap_reached", "reset_spend"]
