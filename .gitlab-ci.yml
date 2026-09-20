@@ -108,27 +108,50 @@ deploy:
     - chmod 600 "$SSH_PRIVATE_KEY" && ssh-add "$SSH_PRIVATE_KEY"
     - mkdir -p ~/.ssh && cp "$SSH_KNOWN_HOSTS" ~/.ssh/known_hosts && chmod 644 ~/.ssh/known_hosts
   script:
+    # No `docker login` here, deliberately. This project is public, so its container
+    # registry serves anonymous pulls — verified with a credential-free `docker pull`.
+    #
+    # The first version of this job DID log in, and got it wrong in a way worth
+    # remembering: it wrote \$CI_REGISTRY_PASSWORD, so the variable expanded on the
+    # SERVER, where it does not exist. docker login received an empty password, failed,
+    # and `set -e` killed the deploy before it touched anything. The heredoc below is
+    # unquoted, which means the runner expands it — escape a variable only when you
+    # genuinely want the server to resolve it.
+    #
+    # If this project is ever made private, do not put credentials back in here. Run
+    # `docker login registry.gitlab.com` once on the server with a read_registry deploy
+    # token; it persists in ~/.docker/config.json.
     - |
       ssh "$DEPLOY_USER@$DEPLOY_HOST" bash -s <<SSH
         set -euo pipefail
         cd "$DEPLOY_PATH"
-        echo "\$CI_REGISTRY_PASSWORD" | docker login -u "\$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
         export SDOC_IMAGE="$IMAGE"
         docker compose -f deploy/docker-compose.prod.yml pull app
         docker compose -f deploy/docker-compose.prod.yml up -d --no-build
         docker image prune -f
+        docker compose -f deploy/docker-compose.prod.yml ps
       SSH
-    - echo "── wait for it to answer ──"
+    - echo "-- wait for the new build to answer --"
+    # -L matters. With a certificate in place Caddy answers port 80 with a 308, and curl
+    # counts a redirect as success, so a check that does not follow it goes green while
+    # the app is still on its back. Match on the body, not on the status code.
     - |
       apk add --no-cache curl >/dev/null
       for i in $(seq 1 30); do
-        if curl -fsS "http://$DEPLOY_HOST/health" >/dev/null 2>&1 || \
-           curl -fsSk "https://$DEPLOY_HOST/health" >/dev/null 2>&1; then
-          echo "healthy after ${i}0s"; exit 0
-        fi
+        body=$(curl -fsSL --max-time 10 "https://$DEPLOY_HOST/health" 2>/dev/null \
+               || curl -fsSL --max-time 10 "http://$DEPLOY_HOST/health" 2>/dev/null \
+               || true)
+        case "$body" in
+          *'"status":"ok"'*)
+            echo "healthy after $((i*10))s"
+            echo "$body" | head -c 300
+            exit 0 ;;
+        esac
         sleep 10
       done
-      echo "the service did not become healthy — check: docker compose logs app"; exit 1
+      echo "the service never reported healthy."
+      echo "  ssh in and look: docker compose -f deploy/docker-compose.prod.yml logs --tail=80 app"
+      exit 1
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       when: on_success
