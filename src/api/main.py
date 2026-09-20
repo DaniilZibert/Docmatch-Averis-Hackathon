@@ -33,7 +33,7 @@ from typing import Any
 
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
                                PlainTextResponse)
 
@@ -78,38 +78,26 @@ class ReviewDecision(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Guarding the endpoints that cost money
+# Why nothing here is behind a password
 # ---------------------------------------------------------------------------
-# The screens stay open to everyone — the submission rules require the prototype to be
-# publicly accessible, and a judge should not need a password to look at it. But two
-# endpoints are not "looking":
+# The submission rules require the live prototype to be publicly accessible, and the
+# organizers confirmed that gating any part of it — including the actions that spend
+# API credits — is not allowed. So every endpoint below is open, POST /run included.
 #
-#   POST /run           with the AI on, one call costs six vision requests. It is also
-#                       unauthenticated by nature of being a button, so a loop against
-#                       it empties the budget in about a minute. Worse, each run resets
-#                       the per-run LLM_MAX_CALLS counter, so that cap protects nothing
-#                       here — the cumulative ledger in config.py is what does.
-#   POST /settings/llm  otherwise anyone can switch the spending on.
+# That is only safe because the spending is defended somewhere else entirely:
 #
-# POST /review/{id} is deliberately left open: it costs nothing, and being able to
-# settle a case is the point of the product. The worst a stranger can do is mark a case
-# resolved, which the next run undoes.
+#   * every AI response is cached on disk by a hash of the request (llm_extract).
+#     The six vision calls are on six files that never change, so the first run pays
+#     and every run after it is free. Somebody hammering /run costs us nothing.
+#   * a cumulative spend ceiling (LLM_SPEND_CAP_USD) written to disk on every call,
+#     which switches the AI off by itself when reached and survives restarts.
+#   * a short cooldown on /run, which throttles rather than denies: everyone can still
+#     press the button, just not a thousand times a second.
+#
+# Limiting our own resource consumption is not the same as limiting access, and the
+# distinction is the whole reason this arrangement works.
 _MIN_SECONDS_BETWEEN_RUNS = 20
 _last_run_at = 0.0
-
-
-def require_admin(x_admin_token: str | None = Header(default=None)) -> None:
-    """Allow the request only if it carries the admin token.
-
-    With SDOC_ADMIN_TOKEN unset the controls are open, which is what you want on a
-    laptop. Set it on any host that has an API key and a public address.
-    """
-    expected = config.admin_token()
-    if not expected:
-        return
-    if x_admin_token != expected:
-        raise HTTPException(401, "this endpoint needs the admin token "
-                                 "(send it as the X-Admin-Token header)")
 
 
 def _llm() -> dict[str, Any]:
@@ -205,7 +193,7 @@ def get_llm_setting() -> dict[str, Any]:
     return _llm()
 
 
-@app.post("/settings/llm", dependencies=[Depends(require_admin)])
+@app.post("/settings/llm")
 def set_llm_setting(setting: LlmSetting) -> dict[str, Any]:
     """Turn the Claude fallbacks on or off, at runtime, without a redeploy.
 
@@ -219,7 +207,7 @@ def set_llm_setting(setting: LlmSetting) -> dict[str, Any]:
     return _llm()
 
 
-@app.post("/run", dependencies=[Depends(require_admin)])
+@app.post("/run")
 def run_pipeline(limit: int | None = None) -> dict[str, Any]:
     """Process the inbox again. Returns immediately; poll /health for progress."""
     global _last_run_at

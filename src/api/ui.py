@@ -164,26 +164,13 @@ a.att:hover{background:#dbeafe;text-decoration:none}
 """
 
 JS = """
-// The endpoints that cost money need an admin token (see require_admin in api/main.py).
-// Ask for it once, keep it in this browser, drop it if the server rejects it.
-function adminToken(force) {
-  let t = force ? null : localStorage.getItem('sdoc_admin');
-  if (!t) {
-    t = prompt('Admin token (leave blank if this server has none):') || '';
-    localStorage.setItem('sdoc_admin', t);
-  }
-  return t;
-}
-async function adminPost(path, body) {
-  let r = await fetch(path, {method: 'POST',
-    headers: {'Content-Type': 'application/json', 'X-Admin-Token': adminToken(false)},
-    body: body ? JSON.stringify(body) : null});
-  if (r.status === 401) {                       // wrong or stale token — ask again once
-    r = await fetch(path, {method: 'POST',
-      headers: {'Content-Type': 'application/json', 'X-Admin-Token': adminToken(true)},
-      body: body ? JSON.stringify(body) : null});
-  }
-  return r;
+// Nothing here needs a token: the rules require the prototype to be publicly
+// accessible and the organizers confirmed that gating the paid actions is not allowed.
+// The spending is defended by caching every AI response and by a cumulative ceiling —
+// see the note at the top of api/main.py.
+async function post(path, body) {
+  return fetch(path, {method: 'POST', headers: {'Content-Type': 'application/json'},
+                      body: body ? JSON.stringify(body) : null});
 }
 
 async function decide(id, status, back) {
@@ -207,20 +194,17 @@ async function decide(id, status, back) {
 async function toggleLlm(btn) {
   const on = btn.getAttribute('aria-pressed') === 'true';
   btn.disabled = true;
-  const r = await adminPost('/settings/llm', {enabled: !on});
+  const r = await post('/settings/llm', {enabled: !on});
   if (r.ok) { location.reload(); }
   else {
-    alert(r.status === 401 ? 'That admin token was not accepted.'
-                           : 'Could not switch: ' + r.status);
+    alert('Could not switch: ' + r.status);
     btn.disabled = false;
   }
 }
 
 async function runInbox(btn) {
   btn.disabled = true; btn.textContent = 'Processing…';
-  const r = await adminPost('/run', null);
-  if (r.status === 401) { alert('That admin token was not accepted.');
-    btn.disabled = false; btn.textContent = 'Re-run'; return; }
+  const r = await post('/run', null);
   if (r.status === 429) { alert('A run just started — give it a moment.');
     btn.disabled = false; btn.textContent = 'Re-run'; return; }
   location.reload();                       // comes back with data-run="running"

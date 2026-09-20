@@ -182,10 +182,11 @@ The demo box says `AI no key`, which on a public page argues against a mandatory
 requirement — so this has to happen before judging. It must **not** happen early: `/run`
 costs six vision calls and anyone can press it.
 
-The guards are already deployed and tested: an admin token on the two endpoints that
-spend money, a 20-second cooldown on `/run`, and a cumulative $2.50 ceiling written to
-disk on every call that switches the AI off by itself when reached. So turning it on is
-now a single safe command rather than a risk.
+We asked the organizers whether the paid actions could sit behind a token. **They said
+no** — the prototype must be publicly accessible in full. So the protection is not a
+lock on the door: every AI answer is cached on disk, which makes the second and every
+later run free (measured: 6 paid calls then 0), backed by a cumulative $2.50 ceiling
+and a 20-second cooldown. Turning it on is a single safe command.
 See [OPERATIONS.md](OPERATIONS.md#3-the-ai-switch-and-what-stops-it-emptying-the-budget).
 
 **A1 · Ablation table — P0** *(was P1; the rules promoted it)* *(Technology Integration 15,

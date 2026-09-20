@@ -103,7 +103,7 @@ def summarise(results: list[EmailResult], elapsed: float) -> str:
       * decided by rules — the share of the inbox the deterministic path handled,
         the same number the organizers' scoreboard prints as `rule_pct`.
     """
-    from .extractor.llm_extract import calls_made, llm_available
+    from .extractor.llm_extract import cache_hits, calls_made, llm_available
 
     categories = Counter(r.category.value for r in results)
     statuses = Counter(r.status.value for r in results
@@ -126,7 +126,7 @@ def summarise(results: list[EmailResult], elapsed: float) -> str:
     lines += ["", f"decided by rules             {by_rule}/{len(results)} "
                   f"({by_rule / max(len(results), 1):.0%})",
               f"Claude available             {'yes' if llm_available() else 'no (rules only)'}",
-              f"Claude calls this run        {calls_made()}"]
+              f"AI calls this run            {calls_made()} paid, {cache_hits()} from cache"]
     if errors:
         lines += ["", f"errors                       {len(errors)}"]
         for r in errors[:5]:

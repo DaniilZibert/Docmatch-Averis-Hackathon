@@ -119,30 +119,49 @@ a stranger could have emptied the whole budget in about a minute.
 
 ### Why a public URL with a key is dangerous by default
 
-`POST /run` re-processes the inbox. With AI on that is six vision calls — the image-only
-scans — roughly $0.07 a time. It is a button, so it was unauthenticated. And
-`store._run()` calls `reset_budget()` on every run, so `LLM_MAX_CALLS` was a *per-run*
-number that any caller could reset simply by calling again. A loop against `/run` costs
-about $5 in sixty seconds.
+`POST /run` re-processes the inbox. With the AI on that is six vision calls — the
+image-only scans — roughly $0.07 a time. It is a button, so anyone can press it. And
+`store._run()` calls `reset_budget()` on every run, so `LLM_MAX_CALLS` is a *per-run*
+number that a caller resets simply by calling again. Unprotected, a loop against `/run`
+costs about $5 in sixty seconds.
 
-### The three guards
+**We asked the organizers whether the paid actions could sit behind a token. They said
+no** — the prototype has to be publicly accessible, all of it. So the endpoints are
+open, and the spending is defended somewhere else entirely.
 
-| guard | what it stops |
-|---|---|
-| `SDOC_ADMIN_TOKEN` on `POST /run` and `POST /settings/llm` | strangers starting runs or switching spending on |
-| 20-second cooldown on `/run` | an authorised click becoming a loop |
-| **`LLM_SPEND_CAP_USD`** (default $2.50) | everything else |
+### The three defences, none of which restricts anybody
 
-The ceiling is the one that matters. It is cumulative, written to the state file **on
-every single call** rather than at the end of a run — a process killed mid-run still
-spent the money — and it survives restarts. When it is reached the AI switches itself
-off and the header reads `AI capped`. It overrides the switch: a budget is a budget
-whatever anybody clicked. Raising it is a deliberate act.
+**1. Every AI answer is cached on disk.** Each call is a pure function of bytes that do
+not change: the same six scanned PDFs, the same document text, the same email. The
+response is stored under a hash of the model and the request, in a volume that survives
+restarts. The first run pays; every run after it is free.
 
-Everything else stays open, because the submission rules require the prototype to be
-publicly accessible. `POST /review/{id}` is deliberately unguarded too: settling a case
-costs nothing and is the point of the product, and the worst a stranger can do is mark
-one resolved, which the next run undoes.
+```
+run 1:  6 paid calls, 0 from cache, $0.1078
+run 2:  0 paid calls, 6 from cache, $0.1078      <- measured, not hoped for
+```
+
+Somebody hammering the button now costs nothing, and we did not have to take the button
+away from them to get there. This is the defence that actually works.
+
+**2. A cumulative spend ceiling** (`LLM_SPEND_CAP_USD`, default $2.50), written to disk
+on every single call rather than at the end of a run — a process killed mid-run still
+spent the money. It survives restarts and overrides the switch: a budget is a budget
+whatever anybody clicked. When it trips the header reads `AI capped`.
+
+**3. A 20-second cooldown on `/run`**, which throttles rather than denies. Everyone can
+still press the button, just not a thousand times a second.
+
+Limiting our own resource consumption is not the same as limiting access, and that
+distinction is why this arrangement satisfies the rule.
+
+### The switch means off, cache included
+
+When the AI is off the cache is not consulted either. That is deliberate: serving a
+cached answer while reporting "rules only" would put vision results into the
+deterministic column of the ablation table and silently turn a scan that *should*
+escalate into one that passes. Off means off; the cache exists to stop a second run
+costing money, not to smuggle answers past the switch.
 
 ### Turning it on, after submission
 

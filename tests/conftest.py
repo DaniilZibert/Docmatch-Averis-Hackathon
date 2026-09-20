@@ -18,6 +18,12 @@ import os
 # Must happen before `src.config` reads the environment.
 os.environ["ANTHROPIC_API_KEY"] = ""
 os.environ["LLM_MAX_CALLS"] = "0"
+os.environ["SDOC_LLM"] = "off"
+# Never let the suite read the working cache. A cached vision answer would make a
+# scanned PDF look readable and quietly turn a deliberate NEEDS_REVIEW into a pass,
+# depending on whether somebody had run the pipeline with the AI on beforehand.
+os.environ["SDOC_LLM_CACHE"] = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), ".cache-never-written")
 
 
 def pytest_report_header(config):

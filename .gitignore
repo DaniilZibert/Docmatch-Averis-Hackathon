@@ -21,8 +21,11 @@ out/
 .venv/
 run-*.json
 
-# the runtime LLM switch — a local/deployment setting, not source
+# the runtime LLM switch and spend ledger — local state, not source
 .sdoc-state.json
+
+# cached AI answers — reproducible, and can contain document text
+.llm-cache/
 
 # organizer answer key — must never land in this repo
 ground_truth.json

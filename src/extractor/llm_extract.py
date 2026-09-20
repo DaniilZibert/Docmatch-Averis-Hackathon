@@ -21,10 +21,12 @@ turns a NEEDS_REVIEW into a wrong answer and costs us on two scoring axes at onc
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
 import re
+from pathlib import Path
 
 from .. import config
 from ..models import (COMPARED_FIELDS, NUMERIC_FIELDS, Category, DocType,
@@ -40,6 +42,65 @@ log = logging.getLogger(__name__)
 MIN_FIELDS_FOR_RULES = 5
 
 MAX_TOKENS = 1024
+
+# ---------------------------------------------------------------------------
+# Response cache
+# ---------------------------------------------------------------------------
+# Every call this module makes is a pure function of bytes that do not change: the six
+# image-only PDFs are the same six files on every run, a document's text is the same
+# text, an email's subject and body are fixed. So the answer is cached on disk, keyed by
+# a hash of the model and the exact request.
+#
+# That is worth more than it looks. The prototype has to be publicly accessible, and
+# POST /run is a button anyone can press; with the AI on, each press used to cost six
+# vision calls. Cached, the first run pays and every run after it is free — so somebody
+# hammering the button costs nothing, and we did not have to take the button away from
+# them to achieve it.
+#
+# It also makes the demo honest: the run summary still reports the calls that were
+# actually made, so a cached run shows zero rather than pretending to have worked.
+
+_cache_hits = 0
+
+
+def cache_dir() -> Path:
+    d = Path(os.environ.get("SDOC_LLM_CACHE", config.PROJECT_ROOT / ".llm-cache"))
+    return d
+
+
+def _cache_key(content, max_tokens: int) -> str:
+    """A stable hash of everything that could change the answer."""
+    h = hashlib.sha256()
+    h.update(config.model().encode())
+    h.update(str(max_tokens).encode())
+    if isinstance(content, str):
+        h.update(content.encode())
+    else:                                    # a list of content blocks, images included
+        for block in content:
+            h.update(json.dumps(block, sort_keys=True, default=str).encode())
+    return h.hexdigest()
+
+
+def _cache_get(key: str) -> str | None:
+    path = cache_dir() / f"{key}.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))["text"]
+    except (OSError, json.JSONDecodeError, KeyError):
+        return None
+
+
+def _cache_put(key: str, text: str) -> None:
+    try:
+        d = cache_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{key}.json").write_text(json.dumps({"text": text}), encoding="utf-8")
+    except OSError as exc:                   # a read-only cache is a slow day, not a bug
+        log.debug("could not write the LLM cache: %s", exc)
+
+
+def cache_hits() -> int:
+    return _cache_hits
+
 
 # Spend guard. Every call goes through _ask, which stops when the switch is off or the
 # budget is gone. Token counts are kept so a run can report what it actually cost.
@@ -113,7 +174,8 @@ def usage() -> dict:
     price_in, price_out = config.token_prices()
     cost = (_tokens_in / 1_000_000) * price_in + (_tokens_out / 1_000_000) * price_out
     total = config.spent()
-    return {"calls": _calls_made, "tokens_in": _tokens_in, "tokens_out": _tokens_out,
+    return {"calls": _calls_made, "cache_hits": _cache_hits,
+            "tokens_in": _tokens_in, "tokens_out": _tokens_out,
             "estimated_usd": round(cost, 4),
             "total_calls": total["calls"], "total_usd": total["usd"],
             "cap_usd": config.spend_cap_usd(),
@@ -121,9 +183,11 @@ def usage() -> dict:
 
 
 def reset_budget() -> None:
-    """Start the call budget over — used by long-lived processes like the API."""
-    global _calls_made, _warned_over_budget
+    """Start the call budget over — used by long-lived processes like the API.
+    The cache is deliberately NOT cleared: it is what makes a re-run free."""
+    global _calls_made, _warned_over_budget, _cache_hits
     _calls_made = 0
+    _cache_hits = 0
     _warned_over_budget = False
 
 
@@ -138,8 +202,6 @@ def _get_client():
         return _client
 
     if not config.llm_enabled():
-        log.info("the Claude switch is off — running rules-only. Turn it on from the "
-                 "header of the review screen, or set SDOC_LLM=on.")
         return None
 
     api_key = config.api_key()
@@ -196,7 +258,24 @@ def forget_client() -> None:
 def _ask(content, *, max_tokens: int = MAX_TOKENS) -> str | None:
     """One Claude call. Returns the text, or None on any failure or once the budget
     for this process is spent."""
-    global _calls_made
+    global _calls_made, _cache_hits
+
+    # The cache is checked only when the AI is switched ON. "Off" has to mean no
+    # AI-derived output at all, or two things break: the rules-only column of the
+    # ablation table would quietly contain vision results while reporting zero calls,
+    # and nobody could ever measure the deterministic path honestly again. The cache
+    # exists to stop a second run costing money, not to smuggle answers past the switch.
+    if not config.llm_enabled():
+        log.info("the AI switch is off — running rules-only. Turn it on from the header "
+                 "of the review screen, or set SDOC_LLM=on.")
+        return None
+
+    key = _cache_key(content, max_tokens)
+    cached = _cache_get(key)
+    if cached is not None:
+        _cache_hits += 1
+        return cached
+
     client = _get_client()
     if client is None:
         return None
@@ -237,7 +316,9 @@ def _ask(content, *, max_tokens: int = MAX_TOKENS) -> str | None:
                             "— the AI has switched itself off and will stay off until "
                             "somebody raises LLM_SPEND_CAP_USD or clears the ledger.",
                             config.spend_cap_usd(), total["usd"], total["calls"])
-        return "".join(block.text for block in message.content if block.type == "text")
+        text = "".join(block.text for block in message.content if block.type == "text")
+        _cache_put(key, text)
+        return text
     except Exception as exc:
         log.warning("Claude call failed (%s: %s) — falling back to escalation.",
                     type(exc).__name__, exc)
@@ -331,5 +412,6 @@ def classify_email(subject: str, body: str) -> Category | None:
 
 __all__ = ["MIN_FIELDS_FOR_RULES", "EXTRACTION_PROMPT", "CLASSIFICATION_PROMPT",
            "COMPARED_FIELDS", "llm_available", "llm_status", "calls_made", "usage",
-           "reset_budget", "forget_client", "extract_from_text", "extract_from_image",
+           "reset_budget", "forget_client", "cache_dir", "cache_hits",
+           "extract_from_text", "extract_from_image",
            "classify_email"]
