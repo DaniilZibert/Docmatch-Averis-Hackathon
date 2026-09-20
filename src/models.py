@@ -155,6 +155,11 @@ class ExtractedDocument(BaseModel):
     unreadable: bool = False
     # Set when the file was read but turned out to be a different kind of document.
     wrong_doc_type: bool = False
+    # Set when the values were recovered from a scan by vision rather than from a text
+    # layer. The document IS readable, but nobody should auto-approve a bill of lading
+    # off an OCR'd image: the comparator escalates it to a human with the values filled
+    # in, so confirming is one click instead of a re-read.
+    needs_confirmation: bool = False
     # Free text for debugging / the review screen.
     notes: str | None = None
 
@@ -254,6 +259,9 @@ class EmailResult(BaseModel):
 
     # -- our own bookkeeping, not part of the organizers' schema ----------
     decided_by: DecidedBy = DecidedBy.RULE
+    # which classifier rule fired ("bl:has-attachment", "llm", ...) — shown on the
+    # review screen so a human can see why an email was routed where it was.
+    classified_by_rule: str | None = None
     needs_human_review: bool = False
     comparisons: list[FieldComparison] = Field(default_factory=list)
     error: str | None = None
@@ -282,27 +290,44 @@ class EmailResult(BaseModel):
             comparisons=list(comparison.comparisons),
         )
 
-    def to_submission_entry(self) -> dict[str, Any]:
-        """Exactly the 5 keys the organizers' scorer reads — nothing else."""
-        return {
+    def to_submission_entry(self, include_diagnostics: bool = True) -> dict[str, Any]:
+        """One entry of submission.json.
+
+        The 5 keys of sample_submission.json, plus `decided_by`. That sixth key is not
+        decoration: the organizers' scorer reads it (scoring.py, score_stage1) and
+        reports `rule_pct` — "resolved by rules (cost)" — on the scoreboard. Omitting it
+        silently throws away the one number that evidences our rules-first design.
+        Nothing else is added: the scorer ignores unknown keys, but a submission is a
+        contract, not a scratchpad.
+
+        Pass include_diagnostics=False for a submission that is byte-identical in shape
+        to sample_submission.json.
+        """
+        entry: dict[str, Any] = {
             "category": self.category.value,
             "status": self.status.value,
             "review_reason": self.review_reason.value if self.review_reason else None,
             "defect_fields": list(self.defect_fields),
             "has_defect": bool(self.has_defect),
         }
+        if include_diagnostics:
+            entry["decided_by"] = self.decided_by.value
+        return entry
 
 
 # ---------------------------------------------------------------------------
 # submission.json
 # ---------------------------------------------------------------------------
 
-def build_submission(results: Iterable[EmailResult]) -> dict[str, dict[str, Any]]:
+def build_submission(results: Iterable[EmailResult],
+                     include_diagnostics: bool = True) -> dict[str, dict[str, Any]]:
     """Turn our results into the `{email_id: {...}}` object the scorer expects."""
-    return {r.email_id: r.to_submission_entry() for r in results}
+    return {r.email_id: r.to_submission_entry(include_diagnostics) for r in results}
 
 
-def write_submission(results: Iterable[EmailResult], path: str | Path = "submission.json") -> Path:
+def write_submission(results: Iterable[EmailResult], path: str | Path = "submission.json",
+                     include_diagnostics: bool = True) -> Path:
     path = Path(path)
-    path.write_text(json.dumps(build_submission(results), indent=2), encoding="utf-8")
+    payload = build_submission(results, include_diagnostics)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return path
