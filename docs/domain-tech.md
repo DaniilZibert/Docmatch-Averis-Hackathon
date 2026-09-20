@@ -69,6 +69,27 @@ curl -s https://yourname.tech/health
 
 HTTP redirects to HTTPS automatically. The certificate renews itself.
 
+## The trap we actually hit
+
+`docker compose -f deploy/docker-compose.prod.yml` sets the project directory to
+`deploy/`, so compose looks for `.env` **there** — not in the repository root you ran
+the command from. Editing `~/averis-hackaton/.env` therefore changed nothing: every
+`${VAR}` fell back to its default, `SDOC_DOMAIN` stayed `:80`, Caddy served the domain
+as a catch-all over plain HTTP, and no certificate was ever requested. The site worked,
+which is exactly why it took a while to notice — it simply had no padlock.
+
+Fixed in the compose file (the services read `../.env` via `env_file`, which resolves
+relative to the compose file). If you ever see the domain serving over HTTP with no
+error anywhere, check what the container actually received rather than what the file
+says:
+
+```bash
+docker compose -f deploy/docker-compose.prod.yml exec caddy printenv SDOC_DOMAIN
+```
+
+That one command distinguishes "the setting did not arrive" from "Caddy could not get a
+certificate", and they look identical from a browser.
+
 ## If it does not work
 
 | what you see | what it is |

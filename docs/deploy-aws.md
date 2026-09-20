@@ -231,6 +231,7 @@ Let's Encrypt will rate-limit you for re-issuing.
 | connects on http, no certificate | DNS has not propagated yet, or `SDOC_DOMAIN` still says `:80` |
 | `/health` shows `"processed": 0` | the run failed — `logs app` will have the traceback |
 | pages are slow the first few seconds after a deploy | the startup run is still going; the page refreshes itself |
+| a variable in `.env` seems ignored | compose reads `.env` from the compose file's directory, not your shell's. The services pull `../.env` through `env_file` for exactly this reason — check `exec app printenv` before assuming the app is wrong |
 | `"llm": "rules-only"` and you expected otherwise | the switch is off (click it in the header), or there is no key in `.env`, or `LLM_MAX_CALLS=0` |
 | the Claude switch forgets itself on restart | the `sdoc_state` volume is not writable by the container user — `logs app` will say so outright |
 | the first `up` gets killed with no message | no swap on a 1 GB box; see step 4 |
