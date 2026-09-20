@@ -3,23 +3,77 @@
 From an operations inbox to a discrepancy report: classify every email, and for
 document-check requests compare the draft **Bill of Lading** against the **Shipping
 Instruction** it is supposed to match, flagging exactly which of the seven shipment
-fields disagree — or escalating to a human when the documents cannot be read.
+fields disagree — or escalating to a human, with the evidence, when the documents
+cannot be read.
+
+```
+520 emails  ->  classify  ->  extract SI + BL  ->  compare 7 fields  ->  report
+                   |               |                      |
+                 rules          txt/xlsx/docx/pdf     OK · MISMATCH · NEEDS_REVIEW
+                 + Claude       + Claude vision       + the SI/BL rows side by side
+```
+
+## Where it stands
+
+Rules-only, no API calls, ~1 second for the whole inbox, measured with the organizers'
+own `score_cli.py`:
+
+| axis | weight | score |
+|---|---|---|
+| stage 1 · classification macro-F1 | 30% | **1.0000** |
+| stage 3 · defect F1 | 20% | **1.0000** |
+| end-to-end · defects caught with the exact fields | 50% | **1.0000** (46/46) |
+| **final score** | | **1.0000** |
+| reliability · escalation recall / precision | diagnostic | 1.000 / 1.000 (20 flagged, 20 gold) |
+| resolved by rules, no LLM call | diagnostic | 100% |
+
+Claude is wired in for the cases the rules cannot reach — scanned pages, unparseable
+layouts, unrecognised emails — and every one of those paths degrades to an honest
+`NEEDS_REVIEW` when there is no key, no network or no library. The demo cannot be
+taken down by a rate limit.
 
 ## Quick start
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env          # add your ANTHROPIC_API_KEY
+cp .env.example .env          # optional: add ANTHROPIC_API_KEY for the fallbacks
 
-pytest -q                     # contract tests
-python -m src.pipeline        # process all 520 emails -> submission.json
+pytest -q                     # 153 tests
+python -m src.pipeline        # 520 emails -> submission.json + a run summary
+python -m src.pipeline --report out/report.md      # + the discrepancy report
 ```
 
-Scoring against the organizers' self-eval server (their docker bundle must be running):
+The service and the human-review screen:
 
 ```bash
-python scripts/run_self_eval.py
+uvicorn src.api.main:app --reload
+curl -X POST localhost:8000/run
+open http://localhost:8000
 ```
+
+Measuring a change:
+
+```bash
+# the answer key is NOT in this repo — pass its path, or use the organizers' server
+python scripts/evaluate.py --ground-truth /path/to/ground_truth.json
+python scripts/evaluate.py --server http://localhost:8080
+
+# keep runs and diff them email by email
+python scripts/evaluate.py --ground-truth <key> --save out/runs/before.json
+python scripts/evaluate.py --compare out/runs/before.json out/runs/after.json
+```
+
+## What it handles
+
+| | |
+|---|---|
+| **Label synonymy** | "Port of Loading" vs "Load Port", "Consignee" vs "To the Order of", and the bilingual Word labels ("Gross Weight毛重(KGS)"). All in `src/extractor/field_aliases.py`. |
+| **Four formats** | 192 `.txt`, 28 `.pdf`, 22 `.xlsx`, 8 `.docx` — including the PDF container table whose `GROSS WEIGHT (KG)` column holds one container's weight, not the shipment's. |
+| **Scanned pages** | Image-only PDFs go to Claude vision. The values are read and shown — and the case still goes to a person, because an OCR'd image is not enough to sign off a bill of lading. |
+| **Collided glyphs** | Three PDFs interleave a long label with its value (`Notify Party/Intermediate ConsCigEnReIEeX`). The known label tail is subtracted back out. |
+| **Blanks vs defects** | `???`, `TBA`, `____MT` mean the sender does not know. That is `NEEDS_REVIEW`, never a mismatch — the false alarm the brief warns about. |
+| **Wrong documents** | An invoice, packing list or certificate of origin sent instead of a BL is detected by the document's own title, not by its labels. |
+| **Human in the loop** | Everything undecided reaches `/review` with all seven rows and the label each value was read under. A correction updates the report immediately. |
 
 ## Layout
 
@@ -29,13 +83,15 @@ python scripts/run_self_eval.py
 | `src/pipeline.py` | classify → extract → compare → `submission.json` |
 | `src/classifier.py`, `src/extractor/` | email categorisation and field extraction |
 | `src/normalize.py`, `src/comparator.py` | value normalisation and the SI/BL comparison |
-| `src/api/`, `src/db/` | service layer, human-review queue |
+| `src/report.py` | the discrepancy report |
+| `src/api/`, `src/db/` | service layer, human-review screen |
+| `scripts/evaluate.py` | score a run, save it, diff two runs, error analysis |
 | `data/` | the participant dataset: 520 emails, 250 SI/BL attachments |
 | `docs/use-case.pdf` | the original problem statement |
 
 ## Working on this
 
-Read **[CLAUDE.md](CLAUDE.md)** first — it holds the task description, the contract
-rules, who owns which files, and the dataset facts worth knowing. The fuller plan
-(architecture, AWS deployment, day-by-day schedule) lives in the Claude project
-"hackaton" as `hackathon-plan.md` and `hackathon-tasks.md`.
+Read **[CLAUDE.md](CLAUDE.md)** first. It holds the contract rules, who owns which
+files, what the score actually rewards (several things about it are not obvious), and
+every dataset trap we have already hit — including the ones that look like bugs if you
+"fix" them.

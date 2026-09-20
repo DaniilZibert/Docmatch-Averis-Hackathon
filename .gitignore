@@ -17,6 +17,10 @@ submission.json
 out/
 *.log
 
+# local run artifacts
+.venv/
+run-*.json
+
 # organizer answer key — must never land in this repo
 ground_truth.json
 
