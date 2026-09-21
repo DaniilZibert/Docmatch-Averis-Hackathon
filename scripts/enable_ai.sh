@@ -10,8 +10,11 @@
 # a stranger could have emptied the budget in about a minute by calling /run in a loop —
 # six vision calls per run, and every run reset the per-run counter.
 #
-# What now stands in the way:
-#   * POST /run and POST /settings/llm require SDOC_ADMIN_TOKEN
+# We asked the organizers whether the paid actions could sit behind a token. They said
+# no — the prototype must be publicly accessible in full. So there is no lock on the
+# door, and everything below is about making an unlocked door cheap to walk through:
+#   * every AI answer is cached against the exact bytes of the request, so a second run
+#     over the same documents costs nothing (measured: 6 paid calls, then 0)
 #   * /run refuses if one started in the last 20 seconds
 #   * a CUMULATIVE spend ceiling (LLM_SPEND_CAP_USD, default $2.50) written to disk on
 #     every call and surviving restarts. When it is reached the AI switches itself off
@@ -70,11 +73,9 @@ esac
 [ -f "$KEY_FILE" ] || { echo "no key file at $KEY_FILE (set SDOC_KEY_FILE)" >&2; exit 1; }
 KEY=$(grep -oE 'sk-ant-[A-Za-z0-9_-]+' "$KEY_FILE" | head -1)
 [ -n "$KEY" ] || { echo "no sk-ant- key found in $KEY_FILE" >&2; exit 1; }
-ADMIN=$(openssl rand -hex 16)
-
-echo "-> writing the key and a fresh admin token to $HOST"
-KEY="$KEY" ADMIN="$ADMIN" ssh -i "$SSH_KEY" "$REMOTE" \
-  "KEY='$KEY' ADMIN='$ADMIN' bash -s" <<'REMOTE'
+echo "-> writing the key to $HOST"
+KEY="$KEY" ssh -i "$SSH_KEY" "$REMOTE" \
+  "KEY='$KEY' bash -s" <<'REMOTE'
 set -euo pipefail
 cd averis-hackaton
 python3 - <<'PY'
@@ -82,7 +83,6 @@ import os, pathlib, re
 p = pathlib.Path(".env")
 t = p.read_text() if p.exists() else ""
 for k, v in (("ANTHROPIC_API_KEY", os.environ["KEY"]),
-             ("SDOC_ADMIN_TOKEN", os.environ["ADMIN"]),
              ("SDOC_LLM", "on")):
     if re.search(rf"(?m)^{k}=", t):
         t = re.sub(rf"(?m)^{k}=.*$", f"{k}={v}", t)
@@ -102,11 +102,11 @@ sleep 2
 echo
 status
 echo
-echo "-- the admin token for this server --"
-echo "   $ADMIN"
+echo "-- what protects the budget from here --"
+echo "   The site is public and so is the AI switch: the organizers ruled that the"
+echo "   prototype must be accessible in full, so anyone can press Re-run. What makes"
+echo "   that affordable is that the answers are cached, the ceiling above is"
+echo "   cumulative and survives restarts, and a run costs six calls at most."
 echo
-echo "   Re-run and the AI switch in the header will ask for it once and remember it in"
-echo "   your browser. Nobody else can start a run or turn the spending on."
-echo "   Keep it with the other credentials, not in git."
-echo
-echo "Switch it off again:  $0 --off"
+echo "   Watch it:            $0 --status"
+echo "   Switch it off again: $0 --off"

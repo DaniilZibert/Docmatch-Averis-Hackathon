@@ -19,7 +19,14 @@ rapidfuzz>=3.10.0        # fuzzy label matching — REQUIRED, not optional: the
                          # resolve only through the fuzzy pass.
 
 # --- LLM fallback (degrades gracefully when absent or unkeyed) ---
-anthropic==0.39.0
+# A floor, and the reason is not wheels this time. anthropic 0.39 passes proxies= to
+# httpx.Client, which httpx removed in 0.28 — so `pip install -r requirements.txt` on a
+# clean machine resolves a pair that cannot construct a client. It fails the way this
+# codebase is designed to fail, by logging and falling back to rules-only, which means
+# it fails SILENTLY: the site serves "rules-only" forever and nothing looks broken.
+# That is exactly what production did until it was caught by hand. Every measurement in
+# out/ was taken on 1.7.0; ship what we measured.
+anthropic>=1.7.0
 
 # --- service layer ---
 fastapi==0.115.2

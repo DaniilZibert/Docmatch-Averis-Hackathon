@@ -102,3 +102,29 @@ def test_spend_is_estimated_from_the_configured_prices(monkeypatch):
     monkeypatch.setattr(llm_extract, "_tokens_in", 1_000_000)
     monkeypatch.setattr(llm_extract, "_tokens_out", 100_000)
     assert llm_extract.usage()["estimated_usd"] == pytest.approx(3.0 + 1.5)
+
+
+def test_the_installed_anthropic_can_actually_build_a_client(monkeypatch):
+    """The one failure graceful degradation cannot protect us from is its own.
+
+    anthropic 0.39 passes proxies= to httpx.Client; httpx removed that in 0.28. The
+    pair installs happily and then cannot construct a client — and because every LLM
+    path here logs and falls back rather than raises, the entire AI half of the system
+    vanishes without one error surfacing. Production ran rules-only for a day on
+    exactly this, with a valid key in place and the switch on, while /health quietly
+    said available:false and nobody was looking.
+
+    Free and offline: constructing a client makes no request.
+    """
+    from src.extractor import llm_extract
+
+    monkeypatch.setenv("SDOC_LLM", "on")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-pretend")
+    llm_extract.forget_client()
+    try:
+        assert llm_extract._get_client() is not None, (
+            "the installed anthropic/httpx pair cannot construct a client — the AI "
+            "half of the system is dead and will not say so"
+        )
+    finally:
+        llm_extract.forget_client()

@@ -77,12 +77,12 @@ not start by building something that exists — run it first.
 
 ```bash
 pip install -r requirements.txt
-pytest -q                       # 234 tests, no network, no spend
+pytest -q                       # 235 tests, no network, no spend
 python -m src.pipeline          # 520 emails -> submission.json, ~1.3s, no LLM calls
 uvicorn src.api.main:app --reload    # then open http://localhost:8000
 ```
 
-1. **`pytest -q`.** 234 tests. If your change reddens one, the test is usually right.
+1. **`pytest -q`.** 235 tests. If your change reddens one, the test is usually right.
 2. **`./scripts/check_robustness.sh <path to data_v2>`** after any change to the rules.
    The sample inbox is one draw from a generator; this scores you on fresh ones. It is
    what caught a bug that a code review had missed.
@@ -124,7 +124,7 @@ scripts/
   check_robustness.sh      score against freshly generated, never-seen inboxes
   llm_smoke.py             prove the Claude paths work (costs a few cents)
   run_self_eval.py         POST submission.json to the organizers' server
-tests/                     234 tests
+tests/                     235 tests
 ```
 
 ### Testing one half without the other

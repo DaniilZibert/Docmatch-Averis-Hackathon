@@ -22,7 +22,7 @@ the marks that are still on the table are presentation marks.
 >
 > ```bash
 > pip install -r requirements.txt
-> pytest -q                             # 234 tests, offline, free
+> pytest -q                             # 235 tests, offline, free
 > python -m src.pipeline                # 520 emails -> submission.json, ~1.3s
 > uvicorn src.api.main:app --reload     # then http://localhost:8000
 > ```
@@ -117,7 +117,7 @@ contributes everything.
 
 ### Engineering
 
-* **234 tests**, offline, no API calls, no spend
+* **235 tests**, offline, no API calls, no spend
 * **AWS EC2** `ap-southeast-2`, Docker, Caddy with automatic Let's Encrypt
 * **CI/CD:** GitLab CI → container registry → pull-based deploy on a systemd timer
 * **Spend guards:** every AI answer cached against the exact bytes of the request, a
@@ -229,7 +229,7 @@ scripts/
 out/
   ablation.md              numbers for the deck
   unseen-layouts.md        numbers for the deck
-tests/                     234 tests
+tests/                     235 tests
 ```
 
 | document | when to open it |
