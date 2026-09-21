@@ -97,7 +97,7 @@ python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\ac
 pip install -r requirements.txt
 cp .env.example .env          # optional — ANTHROPIC_API_KEY enables the AI fallbacks
 
-pytest -q                     # 235 tests · offline · no API calls · no spend
+pytest -q                     # 236 tests · offline · no API calls · no spend
 python -m src.pipeline        # 520 emails -> submission.json + a run summary
 uvicorn src.api.main:app --reload     # then open http://localhost:8000
 ```
@@ -267,7 +267,7 @@ redeploy.
 
 ### Engineering
 
-**235 tests**, all offline, no API calls, no spend. Tests cover the contract, each format
+**236 tests**, all offline, no API calls, no spend. Tests cover the contract, each format
 extractor, the label aliases against every real label in the dataset, the comparator's
 decision order, the API and the upload path. The container runs as a non-root user because
 it reads documents that arrive from outside.
@@ -467,7 +467,7 @@ holding at or near 1.00 as the paperwork drifts; cost per thousand emails.
 | `scripts/` | scoring, run diffing, robustness, ablation, unseen layouts, smoke tests |
 | `data/` | the supplied dataset: 520 emails, 250 attachments |
 | `out/` | measurement artifacts referenced above |
-| `tests/` | 235 tests |
+| `tests/` | 236 tests |
 
 ### Further documentation
 

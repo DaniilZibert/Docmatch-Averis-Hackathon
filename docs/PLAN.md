@@ -136,7 +136,7 @@ the pipeline and no credentials held by CI. [OPERATIONS.md](OPERATIONS.md).
 
 ### Validation
 
-235 tests, free and offline. `scripts/evaluate.py` saves each run and diffs two of them
+236 tests, free and offline. `scripts/evaluate.py` saves each run and diffs two of them
 email by email with an error breakdown per scoring axis. `scripts/check_robustness.sh`
 scores against freshly generated inboxes. `scripts/llm_smoke.py` proves the three
 Claude paths work on input the rules cannot handle.
@@ -202,7 +202,7 @@ Preliminary, 100 points. Our standing, honestly assessed:
 | Working Core Prototype | **25** | strong — the core flow works end to end, deployed |
 | System Design & Architecture | 15 | strong — needs an architecture diagram in the deck |
 | Technology Integration | 15 | **the AI risk lands here** |
-| Technical Feasibility & Validation | 15 | strong — 235 tests, six unseen datasets, error analysis |
+| Technical Feasibility & Validation | 15 | strong — 236 tests, six unseen datasets, error analysis |
 | Problem Statement Understanding | 10 | strong — needs saying out loud in the deck |
 | Innovation & Solution Approach | 10 | thin — nothing distinctive is *explained* yet |
 | Practical Value & Potential | 10 | needs the real-inbox path and cost numbers |

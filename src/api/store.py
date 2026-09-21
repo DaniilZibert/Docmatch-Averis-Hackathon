@@ -31,6 +31,12 @@ class RunState:
     processed: int = 0
     error: str | None = None
     llm_calls: int = 0
+    # Documents the model had already read, served from disk. Tracked separately
+    # because a run with a warm cache makes zero calls, and a screen that reports
+    # only calls then says "no LLM calls" about an inbox the model did read — which
+    # is the opposite of true, on the one screen a judge checks "is AI a key
+    # component" against.
+    llm_cached: int = 0
 
     @property
     def seconds(self) -> float | None:
@@ -41,7 +47,8 @@ class RunState:
     def as_dict(self) -> dict[str, Any]:
         return {"status": self.status, "processed": self.processed,
                 "seconds": round(self.seconds, 2) if self.seconds else None,
-                "llm_calls": self.llm_calls, "error": self.error}
+                "llm_calls": self.llm_calls, "llm_cached": self.llm_cached,
+                "error": self.error}
 
 
 class Store:
@@ -122,7 +129,7 @@ class Store:
 
     def _run(self, data_dir: str | Path, limit: int | None) -> None:
         from .. import pipeline
-        from ..extractor.llm_extract import calls_made, reset_budget
+        from ..extractor.llm_extract import cache_hits, calls_made, reset_budget
         try:
             reset_budget()
             emails = EmailRecord.load_all(data_dir)
@@ -135,6 +142,7 @@ class Store:
                 self.resolutions.clear()
                 self.run.processed = len(results)
                 self.run.llm_calls = calls_made()
+                self.run.llm_cached = cache_hits()
                 self.run.finished_at = time.time()
                 self.run.status = "ready"
         except Exception as exc:                     # a failed run must be visible

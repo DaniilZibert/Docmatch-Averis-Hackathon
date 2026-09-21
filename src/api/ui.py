@@ -332,8 +332,18 @@ def page(title: str, body: str, *, active: str = "", run=None, llm=None) -> str:
         note = "processing the inbox…"
     elif status == "ready":
         seconds = run.seconds or 0
-        note = (f"{run.processed} emails in {seconds:.1f}s"
-                + (f" · {run.llm_calls} Claude calls" if run.llm_calls else " · no LLM calls"))
+        # "no LLM calls" was wrong in the one case that matters. A warm cache makes a
+        # run cost zero calls, and the strip then announced an absence of AI over an
+        # inbox the model HAD read — on the page a judge checks the AI requirement
+        # against. Say what happened, not what did not.
+        cached = getattr(run, "llm_cached", 0) or 0
+        if run.llm_calls:
+            ai = f" · {run.llm_calls} Claude calls"
+        elif cached:
+            ai = f" · {cached} Claude answers from cache"
+        else:
+            ai = " · rules only"
+        note = f"{run.processed} emails in {seconds:.1f}s{ai}"
     elif status == "failed":
         note = "last run failed"
     else:
@@ -414,6 +424,13 @@ checked against the Shipping Instruction it should match.</p>
     reviews = store.open_reviews()
     mismatches = store.mismatches()
     by_rule = sum(1 for r in store.results.values() if r.decided_by.value == "rule")
+    # The classifier needing no model is a real strength and stays. What it must not
+    # do is imply the model read nothing — the documents are a separate question.
+    _calls = getattr(store.run, "llm_calls", 0) or 0
+    _cached = getattr(store.run, "llm_cached", 0) or 0
+    ai_lede = (f" · {_calls} documents read by Claude" if _calls
+               else f" · {_cached} read by Claude, served from cache" if _cached
+               else "")
 
     banner = ""
     if reviews:
@@ -429,7 +446,7 @@ checked against the Shipping Instruction it should match.</p>
     return page("Overview", f"""
 <h1>Overview</h1>
 <p class=lede>{counts['emails']} emails triaged in {store.run.seconds:.1f}s ·
-{by_rule}/{counts['emails']} decided by rules, no LLM call ·
+{by_rule}/{counts['emails']} classified by rules{ai_lede} ·
 {counts['checks']} of them are document checks.</p>
 {banner}
 {stat_cards(counts)}

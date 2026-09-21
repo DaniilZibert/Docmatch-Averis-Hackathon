@@ -222,3 +222,24 @@ def test_the_row_click_handler_leaves_real_interactions_alone(client):
     handler = script[script.index("tr.row"):script.index("async function decide")]
     for guard in ("a, button, input", "metaKey", "ctrlKey", "getSelection"):
         assert guard in handler, f"the click handler does not check {guard}"
+
+
+def test_a_cached_run_does_not_claim_the_model_read_nothing():
+    """The strip used to read "no LLM calls" whenever a run made none — which a warm
+    cache guarantees. So the page a judge checks the AI requirement against announced
+    an absence of AI over an inbox Claude had in fact read, and every later run made it
+    worse. A cached answer is still an answer the model gave."""
+    from src.api import ui
+    from src.api.store import RunState
+
+    warm = RunState(status="ready", started_at=0.0, finished_at=2.0,
+                    processed=520, llm_calls=0, llm_cached=6)
+    assert "6 Claude answers from cache" in ui.page("t", "", run=warm)
+    assert "no LLM calls" not in ui.page("t", "", run=warm)
+
+    cold = RunState(status="ready", started_at=0.0, finished_at=2.0,
+                    processed=520, llm_calls=6, llm_cached=0)
+    assert "6 Claude calls" in ui.page("t", "", run=cold)
+
+    off = RunState(status="ready", started_at=0.0, finished_at=2.0, processed=520)
+    assert "rules only" in ui.page("t", "", run=off)
