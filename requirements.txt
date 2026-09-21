@@ -30,6 +30,10 @@ anthropic>=1.7.0
 
 # --- service layer ---
 fastapi==0.115.2
+# Explicit, not transitive. anthropic 0.39 pulled httpx in; anthropic 1.x does not, and
+# starlette's TestClient imports it — so bumping the Anthropic pin silently uninstalled
+# the HTTP client the test suite runs on and CI could not even collect tests.
+httpx>=0.28.1
 uvicorn[standard]==0.31.1
 python-multipart==0.0.12  # file uploads on /try
 
