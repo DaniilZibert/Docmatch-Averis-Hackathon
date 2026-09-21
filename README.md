@@ -93,6 +93,7 @@ clone.
 git clone <this repository>
 cd averis-hackaton
 
+python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env          # optional — ANTHROPIC_API_KEY enables the AI fallbacks
 
@@ -100,6 +101,9 @@ pytest -q                     # 234 tests · offline · no API calls · no spend
 python -m src.pipeline        # 520 emails -> submission.json + a run summary
 uvicorn src.api.main:app --reload     # then open http://localhost:8000
 ```
+
+The virtual environment is not ceremony: on a current macOS or Debian the system Python
+refuses `pip install` outright, and that would make the very first command fail.
 
 The service processes the inbox itself on startup — there is no command to run and nothing
 to load.
