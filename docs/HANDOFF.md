@@ -202,6 +202,93 @@ That vision moment is what makes AI visibly a key component, which is a mandator
 requirement rather than a nice-to-have. **Do not cut it for time.** Script it, rehearse
 twice, then record.
 
+#### The script, checked against the rubric
+
+Every route, number and quoted string in the script was verified against the live site:
+`email_004` really does disagree on consignee **and** notify_party, the labels really do
+read *"Consignee (Non-Negotiable)"* vs *"To the Order of"*, the report really does say
+container_count 19 and port of discharge 13, and `/review` really does hold five cases
+of each of the four reasons. All of it stands.
+
+Where the script wins marks, and where it leaves them on the table:
+
+| criterion | max | the script |
+|---|---|---|
+| Working Core Prototype | 25 | **full** — the whole Live Demo section |
+| Problem Statement Understanding | 10 | **full** — the two raw documents are the best beat in it |
+| Technology Integration | 15 | **full** — the scan is the right hero shot |
+| System Design & Architecture | 15 | partial — shown working, never named; the deck carries it |
+| Technical Feasibility & Validation | 15 | **absent** — no tests, no unseen data, no ablation |
+| Innovation | 10 | **thin** — nothing is framed as the distinctive idea |
+| Practical Value & Potential | 10 | **half** — no scale, no roadmap |
+
+The last three are worth 35 points and the video is 90 seconds under the limit. The
+section below closes two of them for about 45 seconds.
+
+#### Two corrections to the script before recording
+
+**1. The Tech Stack narration is now wrong, and the fix improves it.** The script says
+*"every one of them decided by rules — not a single AI call"*, which was true of the old
+header. That header was also announcing an absence of AI on the one screen a judge
+checks the AI requirement against, so it was changed. It now reads:
+
+> 520 emails in 3.1s · 6 Claude answers from cache · **AI on** · Spent $0.32
+> 520 emails triaged in 3.1s · 520/520 **classified by rules** · **6 read by Claude** · 220 of them are document checks
+
+Say what is on the screen:
+
+> *Five hundred and twenty emails, three seconds. Every one of them **classified** by
+> rules — no model needed to sort the inbox. And six documents that the rules could not
+> read at all, handled by Claude. That split is the whole design.*
+
+This is better than the original line: it sets up the scan that follows instead of
+arguing against it.
+
+**2. Re-run is now free to press.** The cache lives on the server's volume, so a second
+pass over the same inbox costs nothing. Pressing it on camera is safe and makes a good
+point — but the counter still resets `SETTLED BY A PERSON`, so press it *after* the
+Confirm beat, not before.
+
+#### The missing section — Scale and what's next (~45s, put it inside Impact)
+
+The required shape is Intro → Problem → Tech Stack → Live Demo → **Impact**, and
+potential belongs in Impact. Do not add a sixth section — extend the fifth.
+
+**Screen:** stay on `/report` for the first line, then `/upload`, then back to Overview.
+
+> *About scale. That was five hundred and twenty emails in three seconds, and the work
+> is one email at a time with nothing shared between them — so it spreads across
+> machines without changing a line.*
+>
+> *Per thousand emails the deterministic path costs nothing and takes three seconds.
+> With the model in the loop, twenty-one cents and forty seconds. Doing the same job
+> with an all-AI pipeline costs four dollars nineteen and takes forty-eight minutes.
+> That is the difference between something a company runs on every email and something
+> it runs on a sample.*
+>
+> **[switch to `/upload`]**
+>
+> *And you do not have to take our word for it — upload your own Shipping Instruction
+> and Bill of Lading, or a whole inbox, and it runs the identical code path.*
+>
+> *Where it goes next. It reads a folder today; the same parsers sit behind a live
+> mailbox over IMAP or Microsoft Graph, and that is the only piece between this and
+> production. After that, the review screen already records which label a human
+> accepted — so those corrections become new aliases, and the rules get better at the
+> layouts this customer actually sends. And once a discrepancy is confirmed, drafting
+> the reply back to the carrier is the obvious next step: it stops being a detector and
+> becomes a colleague.*
+
+That lands the video at roughly 4:20 — still forty seconds inside the limit.
+
+#### If you want the last 15 seconds (Validation, 15 points)
+
+One sentence over the Report screen, and it is the strongest claim we own:
+
+> *One number worth saying: it scores a perfect 1.0000 on the organizers' own scorer —
+> and 1.0000 again on six inboxes it had never seen, sixteen hundred emails, different
+> seeds. The first number could be memorisation. The second one cannot be.*
+
 ### B1 · Slide deck — P0, mandatory
 Four sections, named in the rules and marked against: **Technical Architecture,
 Implementation Details, Challenges Faced, Future Roadmap.**
