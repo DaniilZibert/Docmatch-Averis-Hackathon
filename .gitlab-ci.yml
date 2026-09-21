@@ -111,6 +111,15 @@ deploy:
   before_script:
     - apk add --no-cache curl >/dev/null
   script:
+    # Fail in two seconds with a sentence, not in ten minutes with an empty variable.
+    # An unset DEPLOY_HOST makes every curl below target https:///health, which fails
+    # silently forty times and then reports "never appeared" — true, and useless.
+    - |
+      if [ -z "$DEPLOY_HOST" ]; then
+        echo "DEPLOY_HOST is not set. Settings -> CI/CD -> Variables -> add"
+        echo "DEPLOY_HOST = the public hostname, e.g. docmatch.tech (not a secret)."
+        exit 1
+      fi
     - echo "waiting for $CI_COMMIT_SHORT_SHA to go live on $DEPLOY_HOST"
     - |
       for i in $(seq 1 40); do
@@ -129,8 +138,14 @@ deploy:
         sleep 15
       done
       echo "$CI_COMMIT_SHORT_SHA never appeared on $DEPLOY_HOST/health after 10 minutes."
-      echo "  last seen: $(echo "$body" | head -c 200)"
-      echo "  on the server: systemctl status sdoc-update.timer; journalctl -u sdoc-update -n 40"
+      if [ -z "$body" ]; then
+        echo "  /health returned nothing at all — the host is unreachable from CI,"
+        echo "  so this is DNS, TLS or the security group, not the deploy."
+      else
+        echo "  last seen: $(echo "$body" | head -c 200)"
+        echo "  the host answers but reports a different commit, so the timer has not"
+        echo "  pulled yet: journalctl -u sdoc-update -n 40"
+      fi
       exit 1
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
