@@ -29,6 +29,12 @@ services:
     environment:
       # Container paths, not settings — these belong here rather than in .env.
       SDOC_STATE_FILE: /state/sdoc-state.json
+      # On the volume, not in the container. The cache defaults to a directory inside
+      # the image, which a redeploy throws away — so every deploy re-paid for the same
+      # six vision calls, and "run it again, it costs nothing" stopped being true the
+      # moment the container was recreated. The spend ledger was already on /state,
+      # which is how the double charge showed up at all.
+      SDOC_LLM_CACHE: /state/llm-cache
     volumes:
       - sdoc_state:/state          # remembers the Claude switch across restarts
     expose:
