@@ -295,30 +295,31 @@ def llm_switch(llm: dict | None) -> str:
     AI costs money and the rules do not need it, so it is off unless somebody turns it
     on — here, without a redeploy or an ssh session.
 
-    The figures are CUMULATIVE, from the ledger on disk, not per-process: a restart must
-    not appear to reset what has been spent. Cached answers are counted alongside paid
-    ones, because with a warm cache a run makes zero calls and a header that only
-    counted calls would read as though the AI had done nothing — when in fact it had
-    read the documents once and kept the answers.
+    The figure is CUMULATIVE, from the ledger on disk, not per-process: a restart must
+    not appear to reset what has been spent.
+
+    One number, because the header is read at a glance and in front of an audience.
+    The ceiling and the cache hits still matter — a warm cache is why a second run is
+    free, and a run making zero calls has not done nothing — but they belong in the
+    tooltip, not in the strip along the top of every page.
     """
     if llm is None:
         return ""
     if llm.get("cap_reached"):
-        return ('<span class=llm title="the cumulative spend ceiling was reached; '
-                'raise LLM_SPEND_CAP_USD to continue">AI <b>capped</b>'
-                f'<span class=spend>${llm.get("total_usd", 0):.2f}</span></span>')
+        return (f'<span class=llm title="the cumulative ${llm.get("cap_usd", 0):.2f} '
+                'spend ceiling was reached; raise LLM_SPEND_CAP_USD to continue">'
+                'AI <b>capped</b>'
+                f'<span class=spend>Spent ${llm.get("total_usd", 0):.2f}</span></span>')
     if not llm["has_key"]:
         return ('<span class=llm title="no ANTHROPIC_API_KEY on this machine">'
                 'AI <b>no key</b></span>')
     on = llm["enabled"]
-    parts = []
-    if llm.get("cache_hits"):
-        parts.append(f'{llm["cache_hits"]} cached')
-    if llm.get("total_usd"):
-        parts.append(f'${llm["total_usd"]:.2f} of ${llm.get("cap_usd", 0):.2f}')
-    spend = f'<span class=spend>{" · ".join(parts)}</span>' if parts else ""
+    spend = (f'<span class=spend>Spent ${llm["total_usd"]:.2f}</span>'
+             if llm.get("total_usd") else "")
     return (f'<span class="llm {"on" if on else ""}" '
-            f'title="{e(llm["model"])} · {llm.get("total_calls", 0)} paid calls total · '
+            f'title="{e(llm["model"])} · {llm.get("total_calls", 0)} paid calls, '
+            f'{llm.get("cache_hits", 0)} served from cache · '
+            f'${llm.get("total_usd", 0):.2f} of a ${llm.get("cap_usd", 0):.2f} ceiling · '
             f'{llm["budget"]}/run · {e(llm["source"])}">'
             f'<button class=sw onclick="toggleLlm(this)" aria-pressed="{str(on).lower()}"'
             f' aria-label="AI fallbacks"></button>'
